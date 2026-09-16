@@ -6,6 +6,7 @@ import './index.css'
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
 const ALLOWED_EMAIL = 'htehssssss@gmail.com'
+const LOGIN_USERNAME = 'keker'
 
 type Item = { id:string; name:string; spec:string; category:string; unit:string; stock:number; safety_stock:number; location:string; note:string }
 type Person = { id:string; name:string; department:string; title:string; active:boolean }
@@ -99,7 +100,21 @@ function ToolsPage({tools,onAdd,onDone}:{tools:Tool[];onAdd:()=>void;onDone:()=>
 function Toolbar({q,setQ,add,label='新增'}:{q:string;setQ:(s:string)=>void;add?:()=>void;label?:string}){return <div className="toolbar"><div className="search"><Search size={17}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="搜尋…"/></div>{add&&<button className="primary" onClick={add}><Plus size={17}/>{label}</button>}</div>}
 function Field({label,children}:{label:string;children:any}){return <label className="field"><span>{label}</span>{children}</label>}
 function Table({headers,rows=[]}:{headers:string[];rows?:any[]}){return <div className="panel tableWrap"><table><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.length?rows:<tr><td colSpan={headers.length} className="empty">沒有資料</td></tr>}</tbody></table></div>}
-function Login({loading,error}:{loading:boolean;error:string}){const [email,setEmail]=useState(ALLOWED_EMAIL);const [sent,setSent]=useState(false);const [busy,setBusy]=useState(false);const [msg,setMsg]=useState('');const login=async()=>{setBusy(true);setMsg('');const r=await supabase.auth.signInWithOtp({email:email.trim().toLowerCase(),options:{emailRedirectTo:window.location.origin,shouldCreateUser:true}});setBusy(false);if(r.error)setMsg(r.error.message);else setSent(true)};return <div className="login"><div className="loginCard"><div className="brandMark big">©</div><h1>辦公室文具管理系統</h1><p>請使用授權 Email 登入</p>{error&&<div className="notice error">{error}</div>}{sent?<div className="notice">登入連結已寄出，請到 <b>{email}</b> 收信後點擊連結登入。</div>:<><Field label="Email"><input type="email" value={email} onChange={e=>setEmail(e.target.value)} disabled={busy}/></Field>{msg&&<div className="notice error">{msg}</div>}<button className="primary wide" onClick={login} disabled={loading||busy||email.trim().toLowerCase()!==ALLOWED_EMAIL}> {busy?'寄送中…':'寄送登入連結'}</button><small>僅允許 {ALLOWED_EMAIL} 使用</small></>}</div></div>}
+function Login({loading,error}:{loading:boolean;error:string}){
+  const [username,setUsername]=useState(LOGIN_USERNAME)
+  const [password,setPassword]=useState('')
+  const [busy,setBusy]=useState(false)
+  const [msg,setMsg]=useState('')
+  const login=async()=>{
+    setMsg('')
+    if(username.trim().toLowerCase()!==LOGIN_USERNAME){setMsg('帳號或密碼錯誤');return}
+    setBusy(true)
+    const r=await supabase.auth.signInWithPassword({email:ALLOWED_EMAIL,password})
+    setBusy(false)
+    if(r.error){setMsg('帳號或密碼錯誤')}
+  }
+  return <div className="login"><div className="loginCard"><div className="brandMark big">©</div><h1>辦公室文具管理系統</h1><p>請輸入帳號與密碼</p>{error&&<div className="notice error">{error}</div>}<Field label="帳號"><input value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" disabled={busy}/></Field><Field label="密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')login()}} autoComplete="current-password" disabled={busy}/></Field>{msg&&<div className="notice error">{msg}</div>}<button className="primary wide" onClick={login} disabled={loading||busy}>{busy?'登入中…':'登入'}</button></div></div>
+}
 function Modal({title,children,onClose}:{title:string;children:any;onClose:()=>void}){return <div className="modalBackdrop"><div className="modal"><div className="modalHead"><h2>{title}</h2><button className="iconBtn" onClick={onClose}><X size={19}/></button></div>{children}</div></div>}
 function ItemModal({onClose,onDone}:{onClose:()=>void;onDone:()=>void}){const [f,setF]=useState({name:'',spec:'',category:'',unit:'個',stock:0,safety_stock:0,location:'',note:''});const save=async()=>{const r=await supabase.from('items').insert({...f,owner_id:(await supabase.auth.getUser()).data.user!.id});if(!r.error){onClose();onDone()}};return <Modal title="新增文具" onClose={onClose}><FormFields f={f} setF={setF} fields={['name','spec','category','unit','stock','safety_stock','location','note']}/><button className="primary wide" onClick={save}>儲存</button></Modal>}
 function PersonModal({onClose,onDone}:{onClose:()=>void;onDone:()=>void}){const [f,setF]=useState({name:'',department:'',title:'',active:true});const save=async()=>{const r=await supabase.from('people').insert({...f,owner_id:(await supabase.auth.getUser()).data.user!.id});if(!r.error){onClose();onDone()}};return <Modal title="新增人員" onClose={onClose}><FormFields f={f} setF={setF} fields={['name','department','title']}/><button className="primary wide" onClick={save}>儲存</button></Modal>}
