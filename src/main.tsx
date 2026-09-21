@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createClient } from '@supabase/supabase-js'
-import { Package, Wrench, Users, History, ArrowDownToLine, ArrowUpFromLine, LayoutDashboard, Search, Plus, LogOut, Menu, X, RefreshCw, ChevronDown } from 'lucide-react'
+import { Package, Wrench, Users, History, ArrowDownToLine, ArrowUpFromLine, LayoutDashboard, Search, Plus, LogOut, X, RefreshCw, ChevronDown } from 'lucide-react'
 import './index.css'
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
@@ -22,9 +22,8 @@ function App(){
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const [tab,setTab]=useState<Tab>('dashboard')
-  const [collapsed,setCollapsed]=useState(false)
   const [quickOpen,setQuickOpen]=useState(true)
-  const [manageOpen,setManageOpen]=useState(true)
+  const [manageOpen,setManageOpen]=useState(false)
   const [items,setItems]=useState<Item[]>([])
   const [people,setPeople]=useState<Person[]>([])
   const [movements,setMovements]=useState<Movement[]>([])
@@ -53,26 +52,29 @@ function App(){
   if(recovering) return <ResetPassword onDone={async()=>{await supabase.auth.signOut();setRecovering(false);setSession(null)}}/>
   if(!session) return <Login loading={loading} error={error}/>
   return <div className="appShell">
-    <aside className={collapsed?'sidebar collapsed':'sidebar'}>
-      <button className="collapseBtn" onClick={()=>setCollapsed(!collapsed)}>{collapsed?<Menu size={19}/>:<X size={19}/>}</button>
-      <nav>
-        {!collapsed&&<button className="navGroup" aria-expanded={quickOpen} onClick={()=>setQuickOpen(v=>!v)}><span>快速選單</span><ChevronDown size={15}/></button>}
-        {(collapsed||quickOpen)&&<div className="navSection">
-          <Nav active={tab==='dashboard'} icon={<LayoutDashboard size={18}/>} text="總覽" collapsed={collapsed} onClick={()=>setTab('dashboard')}/>
-          <Nav active={tab==='out'} icon={<ArrowUpFromLine size={18}/>} text="快速領用" collapsed={collapsed} onClick={()=>setTab('out')}/>
-          <Nav active={tab==='in'} icon={<ArrowDownToLine size={18}/>} text="入庫登記" collapsed={collapsed} onClick={()=>setTab('in')}/>
-        </div>}
-        {!collapsed&&<button className="navGroup" aria-expanded={manageOpen} onClick={()=>setManageOpen(v=>!v)}><span>管理分類</span><ChevronDown size={15}/></button>}
-        {(collapsed||manageOpen)&&<div className="navSection">
-          <Nav active={tab==='items'} icon={<Package size={18}/>} text="文具庫存" collapsed={collapsed} onClick={()=>setTab('items')}/>
-          <Nav active={tab==='movements'} icon={<History size={18}/>} text="異動紀錄" collapsed={collapsed} onClick={()=>setTab('movements')}/>
-          <Nav active={tab==='people'} icon={<Users size={18}/>} text="人員管理" collapsed={collapsed} onClick={()=>setTab('people')}/>
-          <Nav active={tab==='tools'} icon={<Wrench size={18}/>} text="個人工具管理" collapsed={collapsed} onClick={()=>setTab('tools')}/>
-        </div>}
+    <header className="siteNav">
+      <div className="brand"><div className="brandMark">辦</div><div><b>辦公室文具管家</b><span>Office Stationery Keeper</span></div></div>
+      <nav className="topNavGroups">
+        <div className="topNavGroup">
+          <button className="navGroup" aria-expanded={quickOpen} onClick={()=>{setQuickOpen(v=>!v);setManageOpen(false)}}><span>快速選單</span><ChevronDown size={15}/></button>
+          {quickOpen&&<div className="navSection">
+            <Nav active={tab==='dashboard'} icon={<LayoutDashboard size={18}/>} text="總覽" onClick={()=>{setTab('dashboard');setQuickOpen(false)}}/>
+            <Nav active={tab==='out'} icon={<ArrowUpFromLine size={18}/>} text="快速領用" onClick={()=>{setTab('out');setQuickOpen(false)}}/>
+            <Nav active={tab==='in'} icon={<ArrowDownToLine size={18}/>} text="入庫登記" onClick={()=>{setTab('in');setQuickOpen(false)}}/>
+          </div>}
+        </div>
+        <div className="topNavGroup">
+          <button className="navGroup" aria-expanded={manageOpen} onClick={()=>{setManageOpen(v=>!v);setQuickOpen(false)}}><span>管理分類</span><ChevronDown size={15}/></button>
+          {manageOpen&&<div className="navSection">
+            <Nav active={tab==='items'} icon={<Package size={18}/>} text="文具庫存" onClick={()=>{setTab('items');setManageOpen(false)}}/>
+            <Nav active={tab==='movements'} icon={<History size={18}/>} text="異動紀錄" onClick={()=>{setTab('movements');setManageOpen(false)}}/>
+            <Nav active={tab==='people'} icon={<Users size={18}/>} text="人員管理" onClick={()=>{setTab('people');setManageOpen(false)}}/>
+            <Nav active={tab==='tools'} icon={<Wrench size={18}/>} text="個人工具管理" onClick={()=>{setTab('tools');setManageOpen(false)}}/>
+          </div>}
+        </div>
       </nav>
-      <div className="brand"><div className="brandMark">辦</div>{!collapsed&&<div><b>辦公室文具管家</b><span>Office Stationery Keeper</span></div>}</div>
-      <div className="sideBottom"><button className="ghostBtn" onClick={()=>supabase.auth.signOut()}><LogOut size={17}/>{!collapsed&&'登出'}</button></div>
-    </aside>
+      <button className="ghostBtn navLogout" onClick={()=>supabase.auth.signOut()}><LogOut size={17}/>登出</button>
+    </header>
     <main className="main">
       <header className="topbar"><div><span className="eyebrow">OFFICE SERVICE</span><h1>{title(tab)}</h1><p>文具、工具與人員領用資訊一站管理</p></div><div className="topActions"><button className="iconBtn" onClick={load} title="重新整理"><RefreshCw size={18}/></button>{['items','people','tools','in','out'].includes(tab)&&<button className="primary" onClick={()=>setModal(tab==='items'?'item':tab==='people'?'person':tab==='tools'?'tool':tab==='in'?'in':'issue')}><Plus size={17}/>新增</button>}</div></header>
       {error&&<div className="notice error">{error}</div>}
@@ -95,7 +97,7 @@ function App(){
 }
 
 function title(t:Tab){return ({dashboard:'總覽',items:'文具庫存',out:'快速領用',in:'入庫登記',movements:'異動紀錄',people:'人員管理',tools:'個人工具管理'} as any)[t]}
-function Nav({active,icon,text,collapsed,onClick}:{active:boolean;icon:any;text:string;collapsed:boolean;onClick:()=>void}){return <button className={active?'nav active':'nav'} onClick={onClick}>{icon}{!collapsed&&<span>{text}</span>}</button>}
+function Nav({active,icon,text,onClick}:{active:boolean;icon:any;text:string;onClick:()=>void}){return <button className={active?'nav active':'nav'} onClick={onClick}>{icon}<span>{text}</span></button>}
 function Card({label,value,sub}:{label:string;value:any;sub?:string}){return <div className="stat"><span>{label}</span><strong>{value}</strong>{sub&&<small>{sub}</small>}<i aria-hidden="true"/></div>}
 function Dashboard({items,people,tools,movements,toolMovements}:{items:Item[];people:Person[];tools:Tool[];movements:Movement[];toolMovements:ToolMovement[]}){const low=items.filter(x=>x.stock<=x.safety_stock).length; return <div className="content"><div className="grid4"><Card label="文具品項" value={items.length}/><Card label="文具庫存" value={items.reduce((s,x)=>s+Number(x.stock||0),0)}/><Card label="人員" value={people.filter(x=>x.active).length}/><Card label="個人工具" value={tools.length}/></div><div className="panel"><div className="panelTitle"><b>庫存提醒</b><span>{low?`有 ${low} 項低於安全庫存`:'目前沒有低庫存品項'}</span></div>{low?<Table rows={items.filter(x=>x.stock<=x.safety_stock).map(x=><tr key={x.id}><td>{x.name}</td><td>{x.spec}</td><td>{x.stock} {x.unit}</td><td>{x.safety_stock} {x.unit}</td></tr>)} headers={['品項','規格','目前庫存','安全庫存']}/>:<div className="empty">目前庫存狀況正常</div>}</div></div>}
 function ItemsPage({items,onAdd}:{items:Item[];onAdd:()=>void}){const [q,setQ]=useState('');const rows=items.filter(x=>(x.name+x.spec+x.category).toLowerCase().includes(q.toLowerCase()));return <div className="content"><Toolbar q={q} setQ={setQ} add={onAdd} label="新增文具"/><Table headers={['品項','規格','類別','庫存','安全庫存','位置']} rows={rows.map(x=><tr key={x.id}><td><b>{x.name}</b></td><td>{x.spec||'-'}</td><td>{x.category||'-'}</td><td>{x.stock} {x.unit}</td><td>{x.safety_stock} {x.unit}</td><td>{x.location||'-'}</td></tr>)}/></div>}
