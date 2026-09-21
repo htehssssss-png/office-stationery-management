@@ -18,6 +18,7 @@ type Tab = 'dashboard'|'items'|'out'|'in'|'movements'|'people'|'tools'
 
 function App(){
   const [session,setSession]=useState<any>(null)
+  const [recovering,setRecovering]=useState(false)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const [tab,setTab]=useState<Tab>('dashboard')
@@ -44,9 +45,10 @@ function App(){
     setLoading(false)
   }
 
-  useEffect(()=>{ supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false)}); const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>{setSession(s)}); return ()=>subscription.unsubscribe() },[])
+  useEffect(()=>{ supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false)}); const {data:{subscription}}=supabase.auth.onAuthStateChange((event,s)=>{if(event==='PASSWORD_RECOVERY')setRecovering(true);setSession(s)}); return ()=>subscription.unsubscribe() },[])
   useEffect(()=>{ if(session) { if(session.user.email?.toLowerCase()!==ALLOWED_EMAIL) { setError('此帳號沒有系統使用權限'); supabase.auth.signOut(); return } load() } },[session])
 
+  if(recovering) return <ResetPassword onDone={async()=>{await supabase.auth.signOut();setRecovering(false);setSession(null)}}/>
   if(!session) return <Login loading={loading} error={error}/>
   return <div className="appShell">
     <aside className={collapsed?'sidebar collapsed':'sidebar'}>
@@ -105,6 +107,7 @@ function Login({loading,error}:{loading:boolean;error:string}){
   const [password,setPassword]=useState('')
   const [busy,setBusy]=useState(false)
   const [msg,setMsg]=useState('')
+  const [resetting,setResetting]=useState(false)
   const login=async()=>{
     setMsg('')
     if(username.trim().toLowerCase()!==LOGIN_USERNAME){setMsg('帳號或密碼錯誤');return}
@@ -113,7 +116,18 @@ function Login({loading,error}:{loading:boolean;error:string}){
     setBusy(false)
     if(r.error){setMsg('帳號或密碼錯誤')}
   }
-  return <div className="login"><section className="loginHero"><div className="loginBrand"><div className="brandMark big">辦</div><div><b>辦公室文具管家</b><span>Office Stationery Keeper</span></div></div><div className="officeScene" aria-hidden="true"><div className="sceneShelf"><i/><i/><i/><i/></div><div className="sceneDesk"><span/><b/><em/></div><div className="scenePlant"><i/><i/><i/></div><div className="sceneBox">文具</div></div><div className="heroCopy"><span>SMART OFFICE</span><h2>讓日常用品管理<br/>更簡單、更清楚</h2><p>掌握庫存、領用與工具流向，打造井然有序的工作環境。</p></div></section><section className="loginPanel"><div className="loginCard"><span className="eyebrow">WELCOME BACK</span><h1>登入管理系統</h1><p>請輸入帳號與密碼</p>{error&&<div className="notice error">{error}</div>}<Field label="帳號"><input value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" disabled={busy}/></Field><Field label="密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')login()}} autoComplete="current-password" disabled={busy}/></Field>{msg&&<div className="notice error">{msg}</div>}<button className="primary wide" onClick={login} disabled={loading||busy}>{busy?'登入中…':'登入系統'}</button><small>辦公室文具與個人工具管理平台</small></div></section></div>
+  const sendReset=async()=>{
+    setMsg('');setResetting(true)
+    const {error}=await supabase.auth.resetPasswordForEmail(ALLOWED_EMAIL,{redirectTo:window.location.origin})
+    setResetting(false)
+    setMsg(error?'無法寄出重設郵件，請稍後再試':'密碼重設郵件已寄出，請於 60 分鐘內開啟信件中的連結')
+  }
+  return <div className="login"><section className="loginHero"><div className="loginBrand"><div className="brandMark big">辦</div><div><b>辦公室文具管家</b><span>Office Stationery Keeper</span></div></div><div className="officeScene" aria-hidden="true"><div className="sceneShelf"><i/><i/><i/><i/></div><div className="sceneDesk"><span/><b/><em/></div><div className="scenePlant"><i/><i/><i/></div><div className="sceneBox">文具</div></div><div className="heroCopy"><span>SMART OFFICE</span><h2>讓日常用品管理<br/>更簡單、更清楚</h2><p>掌握庫存、領用與工具流向，打造井然有序的工作環境。</p></div></section><section className="loginPanel"><div className="loginCard"><span className="eyebrow">WELCOME BACK</span><h1>登入管理系統</h1><p>請輸入帳號與密碼</p>{error&&<div className="notice error">{error}</div>}<Field label="帳號"><input value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" disabled={busy}/></Field><Field label="密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')login()}} autoComplete="current-password" disabled={busy}/></Field>{msg&&<div className={msg.includes('已寄出')?'notice':'notice error'}>{msg}</div>}<button className="primary wide" onClick={login} disabled={loading||busy}>{busy?'登入中…':'登入系統'}</button><button className="textBtn" onClick={sendReset} disabled={resetting}>{resetting?'寄送中…':'忘記密碼？'}</button><small>辦公室文具與個人工具管理平台</small></div></section></div>
+}
+function ResetPassword({onDone}:{onDone:()=>void}){
+  const [password,setPassword]=useState('');const [confirm,setConfirm]=useState('');const [busy,setBusy]=useState(false);const [msg,setMsg]=useState('')
+  const save=async()=>{setMsg('');if(password.length<8)return setMsg('新密碼至少需要 8 個字元');if(password!==confirm)return setMsg('兩次輸入的密碼不一致');setBusy(true);const {error}=await supabase.auth.updateUser({password});setBusy(false);if(error)return setMsg(error.message);setMsg('密碼已更新成功');setTimeout(onDone,1200)}
+  return <div className="resetScreen"><div className="resetCard"><div className="brandMark big">辦</div><span className="eyebrow">PASSWORD RECOVERY</span><h1>設定新密碼</h1><p>請輸入新的登入密碼，完成後即可使用帳號 keker 登入。</p><Field label="新密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="new-password" placeholder="至少 8 個字元"/></Field><Field label="確認新密碼"><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')save()}} autoComplete="new-password"/></Field>{msg&&<div className={msg.includes('成功')?'notice':'notice error'}>{msg}</div>}<button className="primary wide" onClick={save} disabled={busy}>{busy?'更新中…':'更新密碼'}</button></div></div>
 }
 function Modal({title,children,onClose}:{title:string;children:any;onClose:()=>void}){return <div className="modalBackdrop"><div className="modal"><div className="modalHead"><h2>{title}</h2><button className="iconBtn" onClick={onClose}><X size={19}/></button></div>{children}</div></div>}
 function ItemModal({onClose,onDone}:{onClose:()=>void;onDone:()=>void}){const [f,setF]=useState({name:'',spec:'',category:'',unit:'個',stock:0,safety_stock:0,location:'',note:''});const save=async()=>{const r=await supabase.from('items').insert({...f,owner_id:(await supabase.auth.getUser()).data.user!.id});if(!r.error){onClose();onDone()}};return <Modal title="新增文具" onClose={onClose}><FormFields f={f} setF={setF} fields={['name','spec','category','unit','stock','safety_stock','location','note']}/><button className="primary wide" onClick={save}>儲存</button></Modal>}
