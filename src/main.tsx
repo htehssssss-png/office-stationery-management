@@ -54,7 +54,6 @@ function App(){
   if(!session) return <Login loading={loading} error={error}/>
   return <div className="appShell">
     <aside className={collapsed?'sidebar collapsed':'sidebar'}>
-      <div className="brand"><div className="brandMark">辦</div>{!collapsed&&<div><b>辦公室文具管家</b><span>Office Stationery Keeper</span></div>}</div>
       <button className="collapseBtn" onClick={()=>setCollapsed(!collapsed)}>{collapsed?<Menu size={19}/>:<X size={19}/>}</button>
       <nav>
         {!collapsed&&<button className="navGroup" aria-expanded={quickOpen} onClick={()=>setQuickOpen(v=>!v)}><span>快速選單</span><ChevronDown size={15}/></button>}
@@ -71,6 +70,7 @@ function App(){
           <Nav active={tab==='tools'} icon={<Wrench size={18}/>} text="個人工具管理" collapsed={collapsed} onClick={()=>setTab('tools')}/>
         </div>}
       </nav>
+      <div className="brand"><div className="brandMark">辦</div>{!collapsed&&<div><b>辦公室文具管家</b><span>Office Stationery Keeper</span></div>}</div>
       <div className="sideBottom"><button className="ghostBtn" onClick={()=>supabase.auth.signOut()}><LogOut size={17}/>{!collapsed&&'登出'}</button></div>
     </aside>
     <main className="main">
