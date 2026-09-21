@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createClient } from '@supabase/supabase-js'
-import { Package, Wrench, Users, History, ArrowDownToLine, ArrowUpFromLine, LayoutDashboard, Search, Plus, LogOut, Menu, X, RefreshCw } from 'lucide-react'
+import { Package, Wrench, Users, History, ArrowDownToLine, ArrowUpFromLine, LayoutDashboard, Search, Plus, LogOut, Menu, X, RefreshCw, ChevronDown } from 'lucide-react'
 import './index.css'
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
@@ -23,6 +23,8 @@ function App(){
   const [error,setError]=useState('')
   const [tab,setTab]=useState<Tab>('dashboard')
   const [collapsed,setCollapsed]=useState(false)
+  const [quickOpen,setQuickOpen]=useState(true)
+  const [manageOpen,setManageOpen]=useState(true)
   const [items,setItems]=useState<Item[]>([])
   const [people,setPeople]=useState<Person[]>([])
   const [movements,setMovements]=useState<Movement[]>([])
@@ -55,14 +57,19 @@ function App(){
       <div className="brand"><div className="brandMark">辦</div>{!collapsed&&<div><b>辦公室文具管家</b><span>Office Stationery Keeper</span></div>}</div>
       <button className="collapseBtn" onClick={()=>setCollapsed(!collapsed)}>{collapsed?<Menu size={19}/>:<X size={19}/>}</button>
       <nav>
-        <Nav active={tab==='dashboard'} icon={<LayoutDashboard size={18}/>} text="總覽" collapsed={collapsed} onClick={()=>setTab('dashboard')}/>
-        <div className="navGroup">{!collapsed&&'管理選單'}</div>
-        <Nav active={tab==='items'} icon={<Package size={18}/>} text="文具庫存" collapsed={collapsed} onClick={()=>setTab('items')}/>
-        <Nav active={tab==='out'} icon={<ArrowUpFromLine size={18}/>} text="快速領用" collapsed={collapsed} onClick={()=>setTab('out')}/>
-        <Nav active={tab==='in'} icon={<ArrowDownToLine size={18}/>} text="入庫登記" collapsed={collapsed} onClick={()=>setTab('in')}/>
-        <Nav active={tab==='movements'} icon={<History size={18}/>} text="異動紀錄" collapsed={collapsed} onClick={()=>setTab('movements')}/>
-        <Nav active={tab==='people'} icon={<Users size={18}/>} text="人員管理" collapsed={collapsed} onClick={()=>setTab('people')}/>
-        <Nav active={tab==='tools'} icon={<Wrench size={18}/>} text="個人工具管理" collapsed={collapsed} onClick={()=>setTab('tools')}/>
+        {!collapsed&&<button className="navGroup" aria-expanded={quickOpen} onClick={()=>setQuickOpen(v=>!v)}><span>快速選單</span><ChevronDown size={15}/></button>}
+        {(collapsed||quickOpen)&&<div className="navSection">
+          <Nav active={tab==='dashboard'} icon={<LayoutDashboard size={18}/>} text="總覽" collapsed={collapsed} onClick={()=>setTab('dashboard')}/>
+          <Nav active={tab==='out'} icon={<ArrowUpFromLine size={18}/>} text="快速領用" collapsed={collapsed} onClick={()=>setTab('out')}/>
+          <Nav active={tab==='in'} icon={<ArrowDownToLine size={18}/>} text="入庫登記" collapsed={collapsed} onClick={()=>setTab('in')}/>
+        </div>}
+        {!collapsed&&<button className="navGroup" aria-expanded={manageOpen} onClick={()=>setManageOpen(v=>!v)}><span>管理分類</span><ChevronDown size={15}/></button>}
+        {(collapsed||manageOpen)&&<div className="navSection">
+          <Nav active={tab==='items'} icon={<Package size={18}/>} text="文具庫存" collapsed={collapsed} onClick={()=>setTab('items')}/>
+          <Nav active={tab==='movements'} icon={<History size={18}/>} text="異動紀錄" collapsed={collapsed} onClick={()=>setTab('movements')}/>
+          <Nav active={tab==='people'} icon={<Users size={18}/>} text="人員管理" collapsed={collapsed} onClick={()=>setTab('people')}/>
+          <Nav active={tab==='tools'} icon={<Wrench size={18}/>} text="個人工具管理" collapsed={collapsed} onClick={()=>setTab('tools')}/>
+        </div>}
       </nav>
       <div className="sideBottom"><button className="ghostBtn" onClick={()=>supabase.auth.signOut()}><LogOut size={17}/>{!collapsed&&'登出'}</button></div>
     </aside>
