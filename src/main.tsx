@@ -12,7 +12,7 @@ const LOGIN_USERNAME = 'keker'
 type Item = { id:string; name:string; spec:string; category:string; unit:string; stock:number; safety_stock:number; location:string; note:string }
 type Person = { id:string; name:string; department:string; title:string; active:boolean }
 type Movement = { id:string; type:string; date:string; item_id:string; item_name:string; quantity:number; person:string; department:string; source:string; note:string }
-type Tool = { id:string; name:string; spec:string; serial:string; holder:string; department:string; issue_date:string; status:string; note:string }
+type Tool = { id:string; name:string; spec:string; category:string; unit:string; stock:number; safety_stock:number; location:string; serial:string; holder:string; department:string; issue_date:string; status:string; note:string }
 type ToolMovement = { id:string; type:string; date:string; tool_id:string; tool_name:string; serial:string; person:string; department:string; note:string }
 
 type Tab = 'dashboard'|'items'|'out'|'in'|'movements'|'people'|'tools'|'account'
@@ -87,21 +87,21 @@ function App(){
       <button className="ghostBtn navLogout" onClick={()=>supabase.auth.signOut()}><LogOut size={17}/>登出</button>
     </header>
     <main className="main">
-      <header className="topbar"><div><h1>{title(tab)}</h1></div><div className="topActions"><button className="iconBtn" onClick={load} title="重新整理"><RefreshCw size={18}/></button>{['people','tools','in','out'].includes(tab)&&<button className="primary" onClick={()=>setModal(tab==='people'?'person':tab==='tools'?'tool':tab==='in'?'in':'issue')}><Plus size={17}/>新增</button>}</div></header>
+      <header className="topbar"><div><h1>{title(tab)}</h1></div><div className="topActions"><button className="iconBtn" onClick={load} title="重新整理"><RefreshCw size={18}/></button>{['people','in','out'].includes(tab)&&<button className="primary" onClick={()=>setModal(tab==='people'?'person':tab==='in'?'in':'issue')}><Plus size={17}/>新增</button>}</div></header>
       {error&&<div className="notice error">{error}</div>}
       {loading?<div className="loading">載入中…</div>:<>
         {tab==='dashboard'&&<Dashboard items={items} people={people} tools={tools} movements={movements} toolMovements={toolMovements}/>} 
-        {tab==='items'&&<ItemsPage items={items} onDone={load}/>} 
+        {tab==='items'&&<ItemsInventoryPage items={items} onAdd={()=>setModal('item')} onDone={load}/>} 
         {tab==='out'&&<IssuePage items={items} tools={tools} people={people} onDone={load}/>} 
         {tab==='in'&&<ReceivePage items={items} onDone={load}/>} 
         {tab==='movements'&&<MovementsPage movements={movements} toolMovements={toolMovements}/>} 
         {tab==='people'&&<PeoplePage people={people} movements={movements} toolMovements={toolMovements} onAdd={()=>setModal('person')} onDone={load}/>} 
-        {tab==='tools'&&<ToolsPage tools={tools} onAdd={()=>setModal('tool')} onDone={load}/>} 
-        {tab==='account'&&isAdmin&&<AccountPage/>}
+        {tab==='tools'&&<ToolsInventoryPage tools={tools} onAdd={()=>setModal('tool')} onDone={load}/>} 
+        {tab==='account'&&isAdmin&&<AdminAccountsPage/>}
       </>}
       {modal==='item'&&<ItemModal onClose={()=>setModal(null)} onDone={load}/>} 
       {modal==='person'&&<PersonModal onClose={()=>setModal(null)} onDone={load}/>} 
-      {modal==='tool'&&<ToolModal people={people} onClose={()=>setModal(null)} onDone={load}/>} 
+      {modal==='tool'&&<InventoryToolModal onClose={()=>setModal(null)} onDone={load}/>} 
       {modal==='in'&&<ReceiveModal items={items} onClose={()=>setModal(null)} onDone={load}/>} 
       {modal==='issue'&&<IssueModal items={items} tools={tools} people={people} onClose={()=>setModal(null)} onDone={load}/>} 
       {modal==='password'&&<PasswordModal email={session.user.email} onClose={()=>setModal(null)}/>} 
@@ -127,6 +127,7 @@ function Field({label,children}:{label:string;children:any}){return <label class
 function Table({headers,rows=[]}:{headers:string[];rows?:any[]}){return <div className="panel tableWrap"><table><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.length?rows:<tr><td colSpan={headers.length} className="empty">沒有資料</td></tr>}</tbody></table></div>}
 function Login({loading,error}:{loading:boolean;error:string}){
   const [username,setUsername]=useState('')
+  const [personalAccount,setPersonalAccount]=useState('')
   const [password,setPassword]=useState('')
   const [confirm,setConfirm]=useState('')
   const [signup,setSignup]=useState(false)
@@ -135,21 +136,34 @@ function Login({loading,error}:{loading:boolean;error:string}){
   const [resetting,setResetting]=useState(false)
   const login=async()=>{
     setMsg('')
-    const email=username.trim().toLowerCase()===LOGIN_USERNAME?ALLOWED_EMAIL:username.trim().toLowerCase()
-    if(!email.includes('@')){setMsg('請輸入有效 Email');return}
+    let email=username.trim().toLowerCase()===LOGIN_USERNAME?ALLOWED_EMAIL:username.trim().toLowerCase()
+    if(!email.includes('@')){
+      const resolved=await supabase.rpc('resolve_login',{p_login:email})
+      email=resolved.data||''
+    }
+    if(!email.includes('@')){setMsg('找不到此個人帳號');return}
     setBusy(true)
     const r=await supabase.auth.signInWithPassword({email,password})
     setBusy(false)
     if(r.error){setMsg('帳號或密碼錯誤')}
   }
-  const apply=async()=>{setMsg('');if(!username.includes('@'))return setMsg('申請帳號請輸入有效 Email');if(password.length<8)return setMsg('密碼至少需要 8 個字元');if(password!==confirm)return setMsg('兩次輸入的密碼不一致');setBusy(true);const {error}=await registrationClient.auth.signUp({email:username.trim().toLowerCase(),password});setBusy(false);if(error)return setMsg(error.message);setMsg('申請完成，請至信箱確認後再登入')}
+  const apply=async()=>{setMsg('');const account=personalAccount.trim().toLowerCase();if(!/^[a-z0-9._-]{3,30}$/.test(account))return setMsg('個人帳號請使用 3～30 個英數字、點、底線或連字號');if(!username.includes('@'))return setMsg('申請帳號請輸入有效 Email');if(password.length<8)return setMsg('密碼至少需要 8 個字元');if(password!==confirm)return setMsg('兩次輸入的密碼不一致');setBusy(true);const result=await registrationClient.auth.signUp({email:username.trim().toLowerCase(),password});if(!result.error&&result.data.user){const mapped=await registrationClient.rpc('register_username',{p_user_id:result.data.user.id,p_username:account});if(mapped.error){setBusy(false);return setMsg(mapped.error.message)}}setBusy(false);if(result.error)return setMsg(result.error.message);setMsg('申請完成，之後可使用個人帳號或 Email 登入')}
   const sendReset=async()=>{
-    setMsg('');const email=username.trim().toLowerCase()===LOGIN_USERNAME?ALLOWED_EMAIL:username.trim().toLowerCase();if(!email.includes('@'))return setMsg('請先輸入申請時使用的 Email');setResetting(true)
+    setMsg('');let email=username.trim().toLowerCase()===LOGIN_USERNAME?ALLOWED_EMAIL:username.trim().toLowerCase();if(!email.includes('@')){email=(await supabase.rpc('resolve_login',{p_login:email})).data||''}if(!email.includes('@'))return setMsg('請先輸入申請時使用的 Email 或個人帳號');setResetting(true)
     const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin})
     setResetting(false)
     setMsg(error?'無法寄出重設郵件，請稍後再試':'密碼重設郵件已寄出，請於 60 分鐘內開啟信件中的連結')
   }
-  return <div className="login"><section className="loginHero"><div className="loginBrand"><div className="brandMark big">HT</div><div><b>管理部｜庫存管理</b></div></div><div className="officeScene" aria-hidden="true"><div className="sceneShelf"><i/><i/><i/><i/></div><div className="sceneDesk"><span/><b/><em/></div><div className="scenePlant"><i/><i/><i/></div><div className="sceneBox">文具</div></div><div className="heroCopy"><h2>啊 － 尼蒿 。</h2></div></section><section className="loginPanel"><div className="loginCard"><span className="eyebrow">WELCOME BACK</span><h1>{signup?'申請管理帳號':'登入管理系統'}</h1><p>{signup?'請使用工作 Email 自行申請帳號':'請輸入帳號與密碼'}</p>{error&&<div className="notice error">{error}</div>}<Field label={signup?'Email':'帳號／Email'}><input type="email" value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" disabled={busy} placeholder="name@company.com"/></Field><Field label="密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!signup)login()}} autoComplete={signup?'new-password':'current-password'} disabled={busy}/></Field>{signup&&<Field label="確認密碼"><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')apply()}} autoComplete="new-password" disabled={busy}/></Field>}{msg&&<div className={msg.includes('完成')||msg.includes('已寄出')?'notice':'notice error'}>{msg}</div>}<button className="primary wide" onClick={signup?apply:login} disabled={loading||busy}>{busy?'處理中…':signup?'申請帳號':'登入系統'}</button>{!signup&&<button className="textBtn" onClick={sendReset} disabled={resetting}>{resetting?'寄送中…':'忘記密碼？'}</button>}<button className="textBtn" onClick={()=>{setSignup(v=>!v);setMsg('');setPassword('');setConfirm('')}}>{signup?'返回登入':'申請新帳號'}</button><small>管理部管理平台</small></div></section></div>
+  return <div className="login">
+    <section className="loginHero"><div className="loginBrand"><div className="brandMark big">HT</div><div><b>管理部｜庫存管理</b></div></div><div className="officeScene" aria-hidden="true"><div className="sceneShelf"><i/><i/><i/><i/></div><div className="sceneDesk"><span/><b/><em/></div><div className="scenePlant"><i/><i/><i/></div><div className="sceneBox">文具</div></div><div className="heroCopy"><h2>啊 － 尼蒿 。</h2></div></section>
+    <section className="loginPanel"><div className="loginCard"><span className="eyebrow">WELCOME BACK</span><h1>{signup?'申請管理帳號':'登入管理系統'}</h1><p>{signup?'設定個人帳號並填寫 Email':'請輸入個人帳號、Email 與密碼'}</p>{error&&<div className="notice error">{error}</div>}
+      {signup&&<Field label="個人帳號"><input type="text" value={personalAccount} onChange={e=>setPersonalAccount(e.target.value)} autoComplete="username" disabled={busy} placeholder="例如 wang.xiaoming"/></Field>}
+      <Field label={signup?'Email':'帳號／Email'}><input type={signup?'email':'text'} value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" disabled={busy} placeholder={signup?'name@company.com':'個人帳號或 Email'}/></Field>
+      <Field label="密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!signup)login()}} autoComplete={signup?'new-password':'current-password'} disabled={busy}/></Field>
+      {signup&&<Field label="確認密碼"><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')apply()}} autoComplete="new-password" disabled={busy}/></Field>}
+      {msg&&<div className={msg.includes('完成')||msg.includes('已寄出')?'notice':'notice error'}>{msg}</div>}<button className="primary wide" onClick={signup?apply:login} disabled={loading||busy}>{busy?'處理中…':signup?'申請帳號':'登入系統'}</button>{!signup&&<button className="textBtn" onClick={sendReset} disabled={resetting}>{resetting?'寄送中…':'忘記密碼？'}</button>}<button className="textBtn" onClick={()=>{setSignup(v=>!v);setMsg('');setPassword('');setConfirm('')}}>{signup?'返回登入':'申請新帳號'}</button><small>管理部管理平台</small>
+    </div></section>
+  </div>
 }
 function ResetPassword({onDone}:{onDone:()=>void}){
   const [password,setPassword]=useState('');const [confirm,setConfirm]=useState('');const [busy,setBusy]=useState(false);const [msg,setMsg]=useState('')
@@ -165,5 +179,77 @@ function ToolModal({onClose,onDone}:{people:Person[];onClose:()=>void;onDone:()=
 function ReceiveModal({items,onClose,onDone}:{items:Item[];onClose:()=>void;onDone:()=>void}){const [item,setItem]=useState('');const [qty,setQty]=useState(1);const save=async()=>{const r=await supabase.rpc('receive_stationery',{p_item_id:item,p_quantity:qty,p_source:'',p_note:''});if(!r.error){onClose();onDone()}};return <Modal title="入庫登記" onClose={onClose}><Field label="文具"><select value={item} onChange={e=>setItem(e.target.value)}><option value="">請選擇</option>{items.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></Field><Field label="數量"><input type="number" min="1" value={qty} onChange={e=>setQty(Number(e.target.value))}/></Field><button className="primary wide" onClick={save}>確認入庫</button></Modal>}
 function IssueModal({items,tools,people,onClose,onDone}:{items:Item[];tools:Tool[];people:Person[];onClose:()=>void;onDone:()=>void}){return <Modal title="快速領用" onClose={onClose}><IssueForm items={items} tools={tools} people={people} onDone={()=>{onClose();onDone()}}/></Modal>}
 function FormFields({f,setF,fields}:{f:any;setF:(x:any)=>void;fields:string[]}){const labels:any={name:'名稱',spec:'規格',category:'類別',unit:'單位',stock:'庫存',safety_stock:'安全庫存',location:'位置',note:'備註',department:'部門',title:'職稱',serial:'序號／編號',holder:'保管人',issue_date:'領用日期',status:'狀態'};return <div className="formGrid">{fields.map(k=><Field key={k} label={labels[k]||k}><input type={['stock','safety_stock'].includes(k)?'number':k==='issue_date'?'date':'text'} value={f[k]??''} onChange={e=>setF({...f,[k]:['stock','safety_stock'].includes(k)?Number(e.target.value):e.target.value})}/></Field>)}</div>}
+
+function ItemsInventoryPage({items,onAdd,onDone}:{items:Item[];onAdd:()=>void;onDone:()=>void}){
+  return <><div className="inventoryAddRow"><button className="primary" onClick={onAdd}><Plus size={17}/>新增</button></div><ItemsPage items={items} onDone={onDone}/></>
+}
+
+function ToolsInventoryPage({tools,onAdd,onDone}:{tools:Tool[];onAdd:()=>void;onDone:()=>void}){
+  const [q,setQ]=useState('')
+  const [msg,setMsg]=useState('')
+  const rows=tools.filter(x=>(x.name+(x.spec||'')+(x.category||'')).toLowerCase().includes(q.toLowerCase()))
+  const receive=async(x:Tool)=>{
+    const raw=window.prompt(`請輸入「${x.name}」進貨數量`,'1')
+    if(raw===null)return
+    const qty=Number(raw)
+    if(!Number.isFinite(qty)||qty<=0)return setMsg('請輸入正確的進貨數量')
+    const {error}=await supabase.from('tools').update({stock:Number(x.stock||0)+qty,status:'在庫'}).eq('id',x.id)
+    setMsg(error?error.message:`${x.name} 已進貨 ${qty} ${x.unit||'個'}`)
+    if(!error)onDone()
+  }
+  return <div className="content">
+    <Toolbar q={q} setQ={setQ} add={onAdd} label="新增"/>
+    {msg&&<div className={msg.includes('已')?'notice':'notice error'}>{msg}</div>}
+    <Table headers={['品項','規格','類別','庫存安全','庫存','位置','操作']} rows={rows.map(x=><tr key={x.id}>
+      <td><b>{x.name}</b></td><td>{x.spec||'-'}</td><td>{x.category||'-'}</td><td>{Number(x.safety_stock||0)} {x.unit||'個'}</td><td>{Number(x.stock||0)} {x.unit||'個'}</td><td>{x.location||'-'}</td><td><button className="smallBtn" onClick={()=>receive(x)}>進貨</button></td>
+    </tr>)}/>
+  </div>
+}
+
+function InventoryToolModal({onClose,onDone}:{onClose:()=>void;onDone:()=>void}){
+  const [f,setF]=useState({name:'',spec:'',category:'',unit:'個',stock:0,safety_stock:0,location:'',note:'',serial:'',holder:'',department:'',issue_date:'',status:'在庫'})
+  const [msg,setMsg]=useState('')
+  const save=async()=>{
+    if(!f.name.trim())return setMsg('請輸入品項名稱')
+    const user=(await supabase.auth.getUser()).data.user
+    const {error}=await supabase.from('tools').insert({...f,owner_id:user!.id})
+    if(error)setMsg(error.message);else{onClose();onDone()}
+  }
+  return <Modal title="新增個人工具" onClose={onClose}><FormFields f={f} setF={setF} fields={['name','spec','category','unit','stock','safety_stock','location','note']}/>{msg&&<div className="notice error">{msg}</div>}<button className="primary wide" onClick={save}>儲存</button></Modal>
+}
+
+type ManagedAccount={user_id:string;email:string;username:string|null;created_at:string}
+function AdminAccountsPage(){
+  const [accounts,setAccounts]=useState<ManagedAccount[]>([])
+  const [email,setEmail]=useState('')
+  const [personalAccount,setPersonalAccount]=useState('')
+  const [password,setPassword]=useState('')
+  const [confirm,setConfirm]=useState('')
+  const [busy,setBusy]=useState(false)
+  const [msg,setMsg]=useState('')
+  const loadAccounts=async()=>{const r=await supabase.rpc('admin_list_accounts');if(r.error)setMsg(r.error.message);else setAccounts(r.data||[])}
+  useEffect(()=>{loadAccounts()},[])
+  const apply=async()=>{
+    setMsg('');const account=personalAccount.trim().toLowerCase()
+    if(!/^[a-z0-9._-]{3,30}$/.test(account))return setMsg('個人帳號請使用 3～30 個英數字、點、底線或連字號')
+    if(!email.includes('@'))return setMsg('請輸入有效 Email')
+    if(password.length<8)return setMsg('密碼至少需要 8 個字元')
+    if(password!==confirm)return setMsg('兩次輸入的密碼不一致')
+    setBusy(true)
+    const result=await registrationClient.auth.signUp({email:email.trim().toLowerCase(),password})
+    if(!result.error&&result.data.user){const mapped=await registrationClient.rpc('register_username',{p_user_id:result.data.user.id,p_username:account});if(mapped.error){setBusy(false);return setMsg(mapped.error.message)}}
+    setBusy(false)
+    if(result.error)return setMsg(result.error.message)
+    setMsg('帳號申請完成');setEmail('');setPersonalAccount('');setPassword('');setConfirm('');loadAccounts()
+  }
+  const remove=async(a:ManagedAccount)=>{
+    if(a.email.toLowerCase()===ALLOWED_EMAIL)return setMsg('主帳號不可刪除')
+    if(!window.confirm(`確定刪除帳號「${a.username||a.email}」？刪除後將無法登入。`))return
+    const r=await supabase.rpc('admin_delete_account',{p_user_id:a.user_id})
+    setMsg(r.error?r.error.message:'帳號已刪除')
+    if(!r.error)loadAccounts()
+  }
+  return <div className="content"><div className="panel formPanel accountPanel"><h2>新增人員帳號</h2><p className="accountHint">設定個人帳號後，可使用個人帳號或 Email 登入。</p><div className="formGrid"><Field label="個人帳號"><input value={personalAccount} onChange={e=>setPersonalAccount(e.target.value)} placeholder="例如 wang.xiaoming"/></Field><Field label="申請人 Email"><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.com"/></Field><Field label="設定密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="至少 8 個字元"/></Field><Field label="確認密碼"><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)}/></Field></div>{msg&&<div className={msg.includes('完成')||msg.includes('刪除')?'notice':'notice error'}>{msg}</div>}<button className="primary" onClick={apply} disabled={busy}>{busy?'申請中…':'新增帳號'}</button></div><div className="panel"><div className="panelTitle"><b>人員帳號管理</b><span>僅主帳號可查看及刪除</span></div><Table headers={['個人帳號','Email','建立日期','操作']} rows={accounts.map(a=><tr key={a.user_id}><td><b>{a.email.toLowerCase()===ALLOWED_EMAIL?'keker':a.username||'-'}</b></td><td>{a.email}</td><td>{a.created_at?new Date(a.created_at).toLocaleDateString('zh-TW'):'-'}</td><td>{a.email.toLowerCase()===ALLOWED_EMAIL?<span>主帳號</span>:<button className="smallBtn dangerBtn" onClick={()=>remove(a)}>刪除帳號</button>}</td></tr>)}/></div></div>
+}
 
 createRoot(document.getElementById('root')!).render(<App/>)
