@@ -18,6 +18,7 @@ type Tab = 'dashboard'|'items'|'out'|'in'|'movements'|'people'|'tools'
 
 function App(){
   const [session,setSession]=useState<any>(null)
+  const [now,setNow]=useState(new Date())
   const [recovering,setRecovering]=useState(false)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
@@ -47,13 +48,15 @@ function App(){
   }
 
   useEffect(()=>{ supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false)}); const {data:{subscription}}=supabase.auth.onAuthStateChange((event,s)=>{if(event==='PASSWORD_RECOVERY')setRecovering(true);setSession(s)}); return ()=>subscription.unsubscribe() },[])
+  useEffect(()=>{const timer=window.setInterval(()=>setNow(new Date()),1000);return()=>window.clearInterval(timer)},[])
   useEffect(()=>{ if(session) { if(session.user.email?.toLowerCase()!==ALLOWED_EMAIL) { setError('此帳號沒有系統使用權限'); supabase.auth.signOut(); return } load() } },[session])
 
   if(recovering) return <ResetPassword onDone={async()=>{await supabase.auth.signOut();setRecovering(false);setSession(null)}}/>
   if(!session) return <Login loading={loading} error={error}/>
   return <div className="appShell">
     <header className="siteNav">
-      <div className="brand"><div className="brandMark">辦</div><div><b>辦公室文具管家</b><span>Office Stationery Keeper</span></div></div>
+      <div className="brand"><div className="brandMark">K</div><div><b>© keker｜庫存管理</b></div></div>
+      <div className="dateTime" aria-label="今日時間"><span>{now.toLocaleDateString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'})}</span><strong>{now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}</strong></div>
       <nav className="topNavGroups">
         <div className="topNavGroup">
           <button className="navGroup" aria-expanded={quickOpen} onClick={()=>{setQuickOpen(v=>!v);setManageOpen(false)}}><span>快速選單</span><ChevronDown size={15}/></button>
@@ -76,7 +79,7 @@ function App(){
       <button className="ghostBtn navLogout" onClick={()=>supabase.auth.signOut()}><LogOut size={17}/>登出</button>
     </header>
     <main className="main">
-      <header className="topbar"><div><span className="eyebrow">OFFICE SERVICE</span><h1>{title(tab)}</h1><p>文具、工具與人員領用資訊一站管理</p></div><div className="topActions"><button className="iconBtn" onClick={load} title="重新整理"><RefreshCw size={18}/></button>{['items','people','tools','in','out'].includes(tab)&&<button className="primary" onClick={()=>setModal(tab==='items'?'item':tab==='people'?'person':tab==='tools'?'tool':tab==='in'?'in':'issue')}><Plus size={17}/>新增</button>}</div></header>
+      <header className="topbar"><div><h1>{title(tab)}</h1></div><div className="topActions"><button className="iconBtn" onClick={load} title="重新整理"><RefreshCw size={18}/></button>{['items','people','tools','in','out'].includes(tab)&&<button className="primary" onClick={()=>setModal(tab==='items'?'item':tab==='people'?'person':tab==='tools'?'tool':tab==='in'?'in':'issue')}><Plus size={17}/>新增</button>}</div></header>
       {error&&<div className="notice error">{error}</div>}
       {loading?<div className="loading">載入中…</div>:<>
         {tab==='dashboard'&&<Dashboard items={items} people={people} tools={tools} movements={movements} toolMovements={toolMovements}/>} 
@@ -131,7 +134,7 @@ function Login({loading,error}:{loading:boolean;error:string}){
     setResetting(false)
     setMsg(error?'無法寄出重設郵件，請稍後再試':'密碼重設郵件已寄出，請於 60 分鐘內開啟信件中的連結')
   }
-  return <div className="login"><section className="loginHero"><div className="loginBrand"><div className="brandMark big">辦</div><div><b>辦公室文具管家</b><span>Office Stationery Keeper</span></div></div><div className="officeScene" aria-hidden="true"><div className="sceneShelf"><i/><i/><i/><i/></div><div className="sceneDesk"><span/><b/><em/></div><div className="scenePlant"><i/><i/><i/></div><div className="sceneBox">文具</div></div><div className="heroCopy"><span>SMART OFFICE</span><h2>讓日常用品管理<br/>更簡單、更清楚</h2><p>掌握庫存、領用與工具流向，打造井然有序的工作環境。</p></div></section><section className="loginPanel"><div className="loginCard"><span className="eyebrow">WELCOME BACK</span><h1>登入管理系統</h1><p>請輸入帳號與密碼</p>{error&&<div className="notice error">{error}</div>}<Field label="帳號"><input value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" disabled={busy}/></Field><Field label="密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')login()}} autoComplete="current-password" disabled={busy}/></Field>{msg&&<div className={msg.includes('已寄出')?'notice':'notice error'}>{msg}</div>}<button className="primary wide" onClick={login} disabled={loading||busy}>{busy?'登入中…':'登入系統'}</button><button className="textBtn" onClick={sendReset} disabled={resetting}>{resetting?'寄送中…':'忘記密碼？'}</button><small>辦公室文具與個人工具管理平台</small></div></section></div>
+  return <div className="login"><section className="loginHero"><div className="loginBrand"><div className="brandMark big">K</div><div><b>© keker｜庫存管理</b></div></div><div className="officeScene" aria-hidden="true"><div className="sceneShelf"><i/><i/><i/><i/></div><div className="sceneDesk"><span/><b/><em/></div><div className="scenePlant"><i/><i/><i/></div><div className="sceneBox">文具</div></div><div className="heroCopy"><span>SMART OFFICE</span><h2>讓日常用品管理<br/>更簡單、更清楚</h2><p>掌握庫存、領用與工具流向，打造井然有序的工作環境。</p></div></section><section className="loginPanel"><div className="loginCard"><span className="eyebrow">WELCOME BACK</span><h1>登入管理系統</h1><p>請輸入帳號與密碼</p>{error&&<div className="notice error">{error}</div>}<Field label="帳號"><input value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" disabled={busy}/></Field><Field label="密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')login()}} autoComplete="current-password" disabled={busy}/></Field>{msg&&<div className={msg.includes('已寄出')?'notice':'notice error'}>{msg}</div>}<button className="primary wide" onClick={login} disabled={loading||busy}>{busy?'登入中…':'登入系統'}</button><button className="textBtn" onClick={sendReset} disabled={resetting}>{resetting?'寄送中…':'忘記密碼？'}</button><small>辦公室文具與個人工具管理平台</small></div></section></div>
 }
 function ResetPassword({onDone}:{onDone:()=>void}){
   const [password,setPassword]=useState('');const [confirm,setConfirm]=useState('');const [busy,setBusy]=useState(false);const [msg,setMsg]=useState('')
