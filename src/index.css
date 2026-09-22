@@ -11,5 +11,7 @@
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:22px}.accountChip{max-width:210px;margin-left:auto;padding:9px 12px;overflow:hidden;border:1px solid var(--line);border-radius:999px;background:#fff;color:#666;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.navLogout{margin-left:0}.uploadBtn{cursor:pointer}.uploadBtn input{display:none}.passwordFields{margin-top:22px}.accountRow+ .passwordFields{margin-top:22px}
 .inventoryAddRow{display:flex;justify-content:flex-end;max-width:1500px;margin:0 auto 12px}
 .dangerBtn{border-color:#e8b2aa;color:#b94f40;background:#fff7f5}.dangerBtn:hover{border-color:#cf674f;background:#fff0ed}
+.multiLines{display:flex;flex-direction:column;gap:12px}.multiLine{display:grid;grid-template-columns:34px minmax(120px,.55fr) minmax(240px,1.6fr) minmax(90px,.4fr) auto;align-items:end;gap:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:#faf9f7}.lineNumber{align-self:center;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--coral-soft);color:var(--coral-deep);font-weight:800}.lineRemove{margin-bottom:3px}.addLineBtn{margin:14px 0 4px}.multiMeta{margin-top:18px}
+@media(max-width:800px){.multiLine{grid-template-columns:28px 1fr}.multiLine .field:nth-of-type(2){grid-column:2}.lineRemove{grid-column:2;justify-self:start}}
 @media(max-width:800px){.accountChip{max-width:130px;font-size:11px}}
 @media(max-width:560px){.grid2{grid-template-columns:1fr}.accountChip{display:none}}
