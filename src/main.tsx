@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createClient } from '@supabase/supabase-js'
-import { Package, Wrench, Users, History, ArrowDownToLine, ArrowUpFromLine, LayoutDashboard, Search, Plus, LogOut, X, RefreshCw, ChevronDown } from 'lucide-react'
+import { Package, Wrench, Users, ArrowDownToLine, ArrowUpFromLine, Search, Plus, LogOut, X, RefreshCw, ChevronDown } from 'lucide-react'
 import './index.css'
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
@@ -14,7 +14,7 @@ type Movement = { id:string; type:string; date:string; item_id:string; item_name
 type Tool = { id:string; name:string; spec:string; serial:string; holder:string; department:string; issue_date:string; status:string; note:string }
 type ToolMovement = { id:string; type:string; date:string; tool_id:string; tool_name:string; serial:string; person:string; department:string; note:string }
 
-type Tab = 'dashboard'|'items'|'out'|'in'|'movements'|'people'|'tools'
+type Tab = 'dashboard'|'items'|'out'|'in'|'movements'|'people'|'tools'|'account'
 
 function App(){
   const [session,setSession]=useState<any>(null)
@@ -23,8 +23,7 @@ function App(){
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const [tab,setTab]=useState<Tab>('dashboard')
-  const [quickOpen,setQuickOpen]=useState(true)
-  const [manageOpen,setManageOpen]=useState(false)
+  const [openMenu,setOpenMenu]=useState<'entry'|'inventory'|'settings'|null>(null)
   const [items,setItems]=useState<Item[]>([])
   const [people,setPeople]=useState<Person[]>([])
   const [movements,setMovements]=useState<Movement[]>([])
@@ -55,24 +54,30 @@ function App(){
   if(!session) return <Login loading={loading} error={error}/>
   return <div className="appShell">
     <header className="siteNav">
-      <div className="brand"><div className="brandMark">K</div><div><b>© keker｜庫存管理</b></div></div>
+      <div className="brand"><div className="brandMark">管</div><div><b>管理部｜庫存管理</b></div></div>
       <div className="dateTime" aria-label="今日時間"><span>{now.toLocaleDateString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'})}</span><strong>{now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}</strong></div>
       <nav className="topNavGroups">
+        <button className={tab==='dashboard'?'navGroup topDirect active':'navGroup topDirect'} onClick={()=>{setTab('dashboard');setOpenMenu(null)}}>總覽</button>
         <div className="topNavGroup">
-          <button className="navGroup" aria-expanded={quickOpen} onClick={()=>{setQuickOpen(v=>!v);setManageOpen(false)}}><span>快速選單</span><ChevronDown size={15}/></button>
-          {quickOpen&&<div className="navSection">
-            <Nav active={tab==='dashboard'} icon={<LayoutDashboard size={18}/>} text="總覽" onClick={()=>{setTab('dashboard');setQuickOpen(false)}}/>
-            <Nav active={tab==='out'} icon={<ArrowUpFromLine size={18}/>} text="快速領用" onClick={()=>{setTab('out');setQuickOpen(false)}}/>
-            <Nav active={tab==='in'} icon={<ArrowDownToLine size={18}/>} text="入庫登記" onClick={()=>{setTab('in');setQuickOpen(false)}}/>
+          <button className="navGroup" aria-expanded={openMenu==='entry'} onClick={()=>setOpenMenu(openMenu==='entry'?null:'entry')}><span>登入</span><ChevronDown size={15}/></button>
+          {openMenu==='entry'&&<div className="navSection">
+            <Nav active={tab==='out'} icon={<ArrowUpFromLine size={18}/>} text="領用" onClick={()=>{setTab('out');setOpenMenu(null)}}/>
+            <Nav active={tab==='in'} icon={<ArrowDownToLine size={18}/>} text="退還／入庫" onClick={()=>{setTab('in');setOpenMenu(null)}}/>
           </div>}
         </div>
         <div className="topNavGroup">
-          <button className="navGroup" aria-expanded={manageOpen} onClick={()=>{setManageOpen(v=>!v);setQuickOpen(false)}}><span>管理分類</span><ChevronDown size={15}/></button>
-          {manageOpen&&<div className="navSection">
-            <Nav active={tab==='items'} icon={<Package size={18}/>} text="文具庫存" onClick={()=>{setTab('items');setManageOpen(false)}}/>
-            <Nav active={tab==='movements'} icon={<History size={18}/>} text="異動紀錄" onClick={()=>{setTab('movements');setManageOpen(false)}}/>
-            <Nav active={tab==='people'} icon={<Users size={18}/>} text="人員管理" onClick={()=>{setTab('people');setManageOpen(false)}}/>
-            <Nav active={tab==='tools'} icon={<Wrench size={18}/>} text="個人工具管理" onClick={()=>{setTab('tools');setManageOpen(false)}}/>
+          <button className="navGroup" aria-expanded={openMenu==='inventory'} onClick={()=>setOpenMenu(openMenu==='inventory'?null:'inventory')}><span>庫存</span><ChevronDown size={15}/></button>
+          {openMenu==='inventory'&&<div className="navSection">
+            <Nav active={tab==='items'} icon={<Package size={18}/>} text="文具庫存" onClick={()=>{setTab('items');setOpenMenu(null)}}/>
+            <Nav active={tab==='tools'} icon={<Wrench size={18}/>} text="個人工具庫存" onClick={()=>{setTab('tools');setOpenMenu(null)}}/>
+          </div>}
+        </div>
+        <button className={tab==='movements'?'navGroup topDirect active':'navGroup topDirect'} onClick={()=>{setTab('movements');setOpenMenu(null)}}>紀錄查詢</button>
+        <div className="topNavGroup">
+          <button className="navGroup" aria-expanded={openMenu==='settings'} onClick={()=>setOpenMenu(openMenu==='settings'?null:'settings')}><span>設定</span><ChevronDown size={15}/></button>
+          {openMenu==='settings'&&<div className="navSection navSectionRight">
+            <Nav active={tab==='people'} icon={<Users size={18}/>} text="人員管理" onClick={()=>{setTab('people');setOpenMenu(null)}}/>
+            <Nav active={tab==='account'} icon={<Users size={18}/>} text="帳號管理" onClick={()=>{setTab('account');setOpenMenu(null)}}/>
           </div>}
         </div>
       </nav>
@@ -89,17 +94,18 @@ function App(){
         {tab==='movements'&&<MovementsPage movements={movements} toolMovements={toolMovements}/>} 
         {tab==='people'&&<PeoplePage people={people} movements={movements} toolMovements={toolMovements} onAdd={()=>setModal('person')}/>} 
         {tab==='tools'&&<ToolsPage tools={tools} onAdd={()=>setModal('tool')} onDone={load}/>} 
+        {tab==='account'&&<AccountPage/>}
       </>}
       {modal==='item'&&<ItemModal onClose={()=>setModal(null)} onDone={load}/>} 
       {modal==='person'&&<PersonModal onClose={()=>setModal(null)} onDone={load}/>} 
       {modal==='tool'&&<ToolModal people={people} onClose={()=>setModal(null)} onDone={load}/>} 
       {modal==='in'&&<ReceiveModal items={items} onClose={()=>setModal(null)} onDone={load}/>} 
       {modal==='issue'&&<IssueModal items={items} tools={tools} people={people} onClose={()=>setModal(null)} onDone={load}/>} 
-    </main>
+    </main><div className="copyright">© keker</div>
   </div>
 }
 
-function title(t:Tab){return ({dashboard:'總覽',items:'文具庫存',out:'快速領用',in:'入庫登記',movements:'異動紀錄',people:'人員管理',tools:'個人工具管理'} as any)[t]}
+function title(t:Tab){return ({dashboard:'總覽',items:'文具庫存',out:'領用',in:'退還／入庫',movements:'紀錄查詢',people:'人員管理',tools:'個人工具庫存',account:'帳號管理'} as any)[t]}
 function Nav({active,icon,text,onClick}:{active:boolean;icon:any;text:string;onClick:()=>void}){return <button className={active?'nav active':'nav'} onClick={onClick}>{icon}<span>{text}</span></button>}
 function Card({label,value,sub}:{label:string;value:any;sub?:string}){return <div className="stat"><span>{label}</span><strong>{value}</strong>{sub&&<small>{sub}</small>}<i aria-hidden="true"/></div>}
 function Dashboard({items,people,tools,movements,toolMovements}:{items:Item[];people:Person[];tools:Tool[];movements:Movement[];toolMovements:ToolMovement[]}){const low=items.filter(x=>x.stock<=x.safety_stock).length; return <div className="content"><div className="grid4"><Card label="文具品項" value={items.length}/><Card label="文具庫存" value={items.reduce((s,x)=>s+Number(x.stock||0),0)}/><Card label="人員" value={people.filter(x=>x.active).length}/><Card label="個人工具" value={tools.length}/></div><div className="panel"><div className="panelTitle"><b>庫存提醒</b><span>{low?`有 ${low} 項低於安全庫存`:'目前沒有低庫存品項'}</span></div>{low?<Table rows={items.filter(x=>x.stock<=x.safety_stock).map(x=><tr key={x.id}><td>{x.name}</td><td>{x.spec}</td><td>{x.stock} {x.unit}</td><td>{x.safety_stock} {x.unit}</td></tr>)} headers={['品項','規格','目前庫存','安全庫存']}/>:<div className="empty">目前庫存狀況正常</div>}</div></div>}
@@ -111,6 +117,7 @@ function ReceiveForm({items,onDone}:{items:Item[];onDone:()=>void}){const [item,
 function MovementsPage({movements,toolMovements}:{movements:Movement[];toolMovements:ToolMovement[]}){const rows=[...movements.map(x=>({date:x.date,cat:'文具',item:x.item_name,spec:'',qty:x.quantity,person:x.person,dept:x.department,action:x.type==='out'?'領用':'入庫',note:x.note,id:'s'+x.id})),...toolMovements.map(x=>({date:x.date,cat:'個人工具',item:x.tool_name,spec:x.serial,qty:1,person:x.person,dept:x.department,action:x.type==='out'?'領用':'歸還',note:x.note,id:'t'+x.id}))].sort((a,b)=>b.date.localeCompare(a.date));const [q,setQ]=useState('');const filtered=rows.filter(x=>(x.item+x.spec+x.person+x.dept+x.cat).toLowerCase().includes(q.toLowerCase()));return <div className="content"><Toolbar q={q} setQ={setQ}/><Table headers={['日期','類別','品項','規格／序號','數量','人員','部門','動作','備註']} rows={filtered.map(x=><tr key={x.id}><td>{x.date}</td><td>{x.cat}</td><td>{x.item}</td><td>{x.spec||'-'}</td><td>{x.qty}</td><td>{x.person||'-'}</td><td>{x.dept||'-'}</td><td>{x.action}</td><td>{x.note||'-'}</td></tr>)}/></div>}
 function PeoplePage({people,movements,toolMovements,onAdd}:{people:Person[];movements:Movement[];toolMovements:ToolMovement[];onAdd:()=>void}){const [q,setQ]=useState('');const [selected,setSelected]=useState('');const p=people.find(x=>x.id===selected);const rows=[...movements.filter(x=>p&&x.person===p.name).map(x=>({date:x.date,cat:'文具',item:x.item_name,spec:'',qty:x.quantity,action:x.type==='out'?'領用':'入庫'})),...toolMovements.filter(x=>p&&x.person===p.name).map(x=>({date:x.date,cat:'個人工具',item:x.tool_name,spec:x.serial,qty:1,action:x.type==='out'?'領用':'歸還'}))];return <div className="content"><Toolbar q={q} setQ={setQ} add={onAdd} label="新增人員"/><Table headers={['姓名','部門','職稱','狀態','領用／異動']}/><div className="panel"><table><thead><tr><th>姓名</th><th>部門</th><th>職稱</th><th>狀態</th><th>操作</th></tr></thead><tbody>{people.filter(x=>(x.name+x.department+x.title).includes(q)).map(x=><tr key={x.id}><td><b>{x.name}</b></td><td>{x.department}</td><td>{x.title}</td><td>{x.active?'在職':'停用'}</td><td><button className="smallBtn" onClick={()=>setSelected(x.id)}>查看領用紀錄</button></td></tr>)}</tbody></table></div>{p&&<div className="panel"><div className="panelTitle"><b>{p.name}｜人員領用紀錄</b></div><Table headers={['日期','類別','品項','規格／序號','數量','動作']} rows={rows.map((x,i)=><tr key={i}><td>{x.date}</td><td>{x.cat}</td><td>{x.item}</td><td>{x.spec||'-'}</td><td>{x.qty}</td><td>{x.action}</td></tr>)}/></div>}</div>}
 function ToolsPage({tools,onAdd,onDone}:{tools:Tool[];onAdd:()=>void;onDone:()=>void}){const [q,setQ]=useState('');const move=async(t:Tool,type:'out'|'in')=>{if(type==='out')return;const r=await supabase.rpc('move_tool',{p_tool_id:t.id,p_type:'in',p_person:'',p_department:'',p_note:''});if(!r.error)onDone()};return <div className="content"><Toolbar q={q} setQ={setQ} add={onAdd} label="新增工具"/><Table headers={['工具名稱','規格','序號／編號','保管人','部門','領用日期','狀態','備註']} rows={tools.filter(x=>(x.name+x.spec+x.serial+x.holder+x.department).toLowerCase().includes(q.toLowerCase())).map(x=><tr key={x.id}><td><b>{x.name}</b></td><td>{x.spec}</td><td>{x.serial}</td><td>{x.holder||'-'}</td><td>{x.department||'-'}</td><td>{x.issue_date||'-'}</td><td>{x.status||'在庫'}</td><td>{x.note||'-'} {x.status==='已領用'&&<button className="smallBtn" onClick={()=>move(x,'in')}>歸還</button>}</td></tr>)}/></div>}
+function AccountPage(){const [busy,setBusy]=useState(false);const [msg,setMsg]=useState('');const send=async()=>{setBusy(true);setMsg('');const {error}=await supabase.auth.resetPasswordForEmail(ALLOWED_EMAIL,{redirectTo:window.location.origin});setBusy(false);setMsg(error?'無法寄出重設郵件，請稍後再試':'密碼重設郵件已寄出，請於 60 分鐘內開啟信件中的連結')};return <div className="content"><div className="panel formPanel accountPanel"><h2>帳號管理</h2><div className="accountRow"><span>登入帳號</span><b>{LOGIN_USERNAME}</b></div><div className="accountRow"><span>綁定信箱</span><b>{ALLOWED_EMAIL}</b></div>{msg&&<div className={msg.includes('已寄出')?'notice':'notice error'}>{msg}</div>}<button className="primary" onClick={send} disabled={busy}>{busy?'寄送中…':'寄送密碼重設信'}</button></div></div>}
 function Toolbar({q,setQ,add,label='新增'}:{q:string;setQ:(s:string)=>void;add?:()=>void;label?:string}){return <div className="toolbar"><div className="search"><Search size={17}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="搜尋…"/></div>{add&&<button className="primary" onClick={add}><Plus size={17}/>{label}</button>}</div>}
 function Field({label,children}:{label:string;children:any}){return <label className="field"><span>{label}</span>{children}</label>}
 function Table({headers,rows=[]}:{headers:string[];rows?:any[]}){return <div className="panel tableWrap"><table><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.length?rows:<tr><td colSpan={headers.length} className="empty">沒有資料</td></tr>}</tbody></table></div>}
