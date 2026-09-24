@@ -33,6 +33,11 @@ function App(){
   const [toolMovements,setToolMovements]=useState<ToolMovement[]>([])
   const [modal,setModal]=useState<string|null>(null)
   const isAdmin=session?.user?.email?.toLowerCase()===ALLOWED_EMAIL
+  const workEnd=new Date(now); workEnd.setHours(17,0,0,0)
+  const remaining=Math.max(0,workEnd.getTime()-now.getTime())
+  const countdown=remaining>0
+    ? `${String(Math.floor(remaining/3600000)).padStart(2,'0')}:${String(Math.floor((remaining%3600000)/60000)).padStart(2,'0')}:${String(Math.floor((remaining%60000)/1000)).padStart(2,'0')}`
+    : '我要下班啦 ~~~'
 
   const load=async()=>{
     setLoading(true); setError('')
@@ -58,7 +63,7 @@ function App(){
   return <div className="appShell">
     <header className="siteNav">
       <div className="brand"><div className="brandMark">HT</div><div><b>管理部｜庫存管理</b></div></div>
-      <div className="dateTime" aria-label="今日時間"><span>{now.toLocaleDateString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'})}</span><strong>{now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}</strong></div>
+      <div className="dateTime" aria-label="今日時間"><span>{now.toLocaleDateString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'})}</span><strong>{now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}</strong><em>下班倒數：{countdown}</em></div>
       <nav className="topNavGroups">
         <button className={tab==='dashboard'?'navGroup topDirect active':'navGroup topDirect'} onClick={()=>{setTab('dashboard');setOpenMenu(null)}}>總覽</button>
         <div className="topNavGroup">
