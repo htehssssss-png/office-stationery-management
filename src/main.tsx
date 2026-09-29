@@ -155,7 +155,7 @@ function MovementsPage({movements,toolMovements,onDone}:{movements:Movement[];to
  const [filters,setFilters]=useState(blank);
  const [page,setPage]=useState(1);
  const [msg,setMsg]=useState('');
- const filtered=rows.filter(x=>(!filters.date||x.date.slice(0,10)===filters.date)&&(!filters.cat||x.cat===filters.cat)&&(!filters.item||`${x.item} ${x.spec}`.toLowerCase().includes(filters.item.toLowerCase()))&&(!filters.person||x.person.toLowerCase().includes(filters.person.toLowerCase()))&&(!filters.dept||x.dept.toLowerCase().includes(filters.dept.toLowerCase()))&&(!filters.action||x.action===filters.action));
+ const filtered=rows.filter(x=>!x.note.startsWith(deletedMark)&&(!filters.date||x.date.slice(0,10)===filters.date)&&(!filters.cat||x.cat===filters.cat)&&(!filters.item||`${x.item} ${x.spec}`.toLowerCase().includes(filters.item.toLowerCase()))&&(!filters.person||x.person.toLowerCase().includes(filters.person.toLowerCase()))&&(!filters.dept||x.dept.toLowerCase().includes(filters.dept.toLowerCase()))&&(!filters.action||x.action===filters.action));
  const totalPages=Math.ceil(filtered.length/20);
  const currentPage=Math.min(page,Math.max(1,totalPages));
  const pageRows=filtered.slice((currentPage-1)*20,currentPage*20);
