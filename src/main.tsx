@@ -231,9 +231,8 @@ function Login({loading,error}:{loading:boolean;error:string}){
     setResetting(false)
     setMsg(error?'無法寄出重設郵件，請稍後再試':'密碼重設郵件已寄出，請於 60 分鐘內開啟信件中的連結')
   }
-  return <div className="login">
-    <section className="loginHero"><div className="loginBrand"><div className="brandMark big">HT</div><div><b>管理部｜庫存管理</b></div></div><div className="officeScene" aria-hidden="true"><div className="sceneShelf"><i/><i/><i/><i/></div><div className="sceneDesk"><span/><b/><em/></div><div className="scenePlant"><i/><i/><i/></div><div className="sceneBox">文具</div></div><div className="heroCopy"><h2>啊 － 尼蒿 。</h2></div></section>
-    <section className="loginPanel"><div className="loginCard"><span className="eyebrow">WELCOME BACK</span><h1>{signup?'申請管理帳號':'登入管理系統'}</h1><p>{signup?'設定個人帳號並填寫 Email':'請輸入個人帳號、Email 與密碼'}</p>{error&&<div className="notice error">{error}</div>}
+  return <div className="login simpleLogin">
+    <section className="loginPanel"><div className="loginCard"><div className="loginIdentity"><div className="brandMark big">HT</div><div><b>管理部｜庫存管理</b><span>管理部管理平台</span></div></div><h1>{signup?'申請管理帳號':'登入管理系統'}</h1><p>{signup?'設定個人帳號並填寫 Email':'請輸入個人帳號、Email 與密碼'}</p>{error&&<div className="notice error">{error}</div>}
       {signup&&<Field label="個人帳號"><input type="text" value={personalAccount} onChange={e=>setPersonalAccount(e.target.value)} autoComplete="username" disabled={busy} placeholder="例如 wang.xiaoming"/></Field>}
       <Field label={signup?'Email':'帳號／Email'}><input type={signup?'email':'text'} value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" disabled={busy} placeholder={signup?'name@company.com':'個人帳號或 Email'}/></Field>
       <Field label="密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!signup)login()}} autoComplete={signup?'new-password':'current-password'} disabled={busy}/></Field>
