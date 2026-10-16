@@ -167,9 +167,23 @@ function MovementsPage({movements,toolMovements,isAdmin,onDone}:{movements:Movem
  useEffect(()=>setPage(1),[filters]);
  const change=(key:keyof typeof blank,value:string)=>setDraft({...draft,[key]:value});
  const markDeleted=async(x:typeof rows[number])=>{
-  if(x.note.startsWith(deletedMark))return;
-  if(!await confirmDialog('確定標示刪除並還原這筆紀錄造成的庫存變動？原始紀錄仍會保留。'))return;
-  setMsg('');
+ if(x.note.startsWith(deletedMark))return;
+ if(!await confirmDialog('確定標示刪除並還原這筆紀錄造成的庫存變動？原始紀錄仍會保留。'))return;
+ setMsg('');
+  if(x.cat==='個人工具'&&x.action==='進貨'){
+   const laterResult=await supabase.from('tool_movements').select('id,date,note').eq('tool_id',x.inventoryId).neq('id',x.rawId).gt('date',x.date);
+   if(laterResult.error)return setMsg(`無法檢查後續紀錄：${laterResult.error.message}`);
+   const laterActive=(laterResult.data||[]).some((movement:any)=>!String(movement.note||'').startsWith(deletedMark));
+   if(laterActive)return setMsg('無法刪除：此管理編號在進貨後已有領用或退還紀錄，請先處理後續紀錄');
+   const toolResult=await supabase.from('tools').select('stock,status,holder,department,issue_date').eq('id',x.inventoryId).single();
+   if(toolResult.error)return setMsg(`無法取得工具狀態：${toolResult.error.message}`);
+   const previous=toolResult.data;
+   const toolUpdate=await supabase.from('tools').update({stock:0,status:'已刪除',holder:'',department:'',issue_date:''}).eq('id',x.inventoryId).select('id').maybeSingle();
+   if(toolUpdate.error||!toolUpdate.data)return setMsg(`工具入庫撤銷失敗：${toolUpdate.error?.message||'找不到工具'}`);
+   const movementUpdate=await supabase.from('tool_movements').update({note:`${deletedMark}${x.note}`}).eq('id',x.rawId).select('id').maybeSingle();
+   if(movementUpdate.error||!movementUpdate.data){await supabase.from('tools').update(previous).eq('id',x.inventoryId);return setMsg(`紀錄標示失敗：${movementUpdate.error?.message||'找不到紀錄'}`)}
+   setMsg(`已標示刪除，管理編號 ${x.spec||''} 的進貨已撤銷`);onDone();return;
+  }
   const stockResult=await supabase.from(x.inventoryTable).select('stock').eq('id',x.inventoryId).single();
   if(stockResult.error)return setMsg(`無法取得目前庫存：${stockResult.error.message}`);
   const currentStock=Number(stockResult.data?.stock||0);
@@ -183,8 +197,19 @@ function MovementsPage({movements,toolMovements,isAdmin,onDone}:{movements:Movem
   setMsg(`已標示刪除，庫存由 ${currentStock} 還原為 ${nextStock}`);onDone();
  };
  const restoreDeleted=async(x:typeof rows[number])=>{
-  if(!x.note.startsWith(deletedMark)||!await confirmDialog('確定恢復這筆紀錄並重新套用庫存變動？'))return;
-  setMsg('');
+ if(!x.note.startsWith(deletedMark)||!await confirmDialog('確定恢復這筆紀錄並重新套用庫存變動？'))return;
+ setMsg('');
+  if(x.cat==='個人工具'&&x.action==='進貨'){
+   const originalNote=x.note.slice(deletedMark.length);
+   const toolResult=await supabase.from('tools').select('stock,status,holder,department,issue_date').eq('id',x.inventoryId).single();
+   if(toolResult.error)return setMsg(`無法取得工具狀態：${toolResult.error.message}`);
+   const previous=toolResult.data;
+   const toolUpdate=await supabase.from('tools').update({stock:Number(x.qty)||1,status:'在庫',holder:'',department:'',issue_date:''}).eq('id',x.inventoryId).select('id').maybeSingle();
+   if(toolUpdate.error||!toolUpdate.data)return setMsg(`工具入庫恢復失敗：${toolUpdate.error?.message||'找不到工具'}`);
+   const movementUpdate=await supabase.from('tool_movements').update({note:originalNote}).eq('id',x.rawId).select('id').maybeSingle();
+   if(movementUpdate.error||!movementUpdate.data){await supabase.from('tools').update(previous).eq('id',x.inventoryId);return setMsg(`紀錄恢復失敗：${movementUpdate.error?.message||'找不到紀錄'}`)}
+   setMsg(`已恢復紀錄，管理編號 ${x.spec||''} 已回到庫存`);onDone();return;
+  }
   const stockResult=await supabase.from(x.inventoryTable).select('stock').eq('id',x.inventoryId).single();
   if(stockResult.error)return setMsg(`無法取得目前庫存：${stockResult.error.message}`);
   const currentStock=Number(stockResult.data?.stock||0);
