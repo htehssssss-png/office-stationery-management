@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "office-stationery-management",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-06",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "office-stationery-db",
+      "database_id": "4f54b865-1a3b-46ec-b0e2-22a283e1db0f"
+    }
+  ]
+}
