@@ -256,7 +256,7 @@ function Login({loading,error}:{loading:boolean;error:string}){
 
   }
   return <div className="login simpleLogin">
-    <section className="loginPanel"><div className="loginCard"><div className="loginIdentity"><div className="brandMark big">HT</div><div><b>管理部｜庫存管理</b><span>管理部管理平台</span></div></div><h1>登入管理系統</h1><p>帳號由系統管理員統一建立</p>{error&&<div className="notice error">{error}</div>}
+    <section className="loginPanel"><div className="loginCard"><div className="loginIdentity"><div className="brandMark big">HT</div><div><b>管理部｜庫存管理</b><span>管理部管理平台</span></div></div><h1>登入管理系統</h1><p> </p>{error&&<div className="notice error">{error}</div>}
       <Field label="帳號"><input type="text" value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" disabled={busy} placeholder="請輸入帳號"/></Field>
       <Field label="密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')login()}} autoComplete="current-password" disabled={busy}/></Field>
       {msg&&<div className={msg.includes('完成')||msg.includes('已寄出')?'notice':'notice error'}>{msg}</div>}<button className="primary wide" onClick={login} disabled={loading||busy}>{busy?'處理中…':'登入系統'}</button><button className="textBtn" onClick={sendReset} disabled={resetting}>{resetting?'處理中…':'忘記密碼？'}</button><small>管理部管理平台</small>
