@@ -232,10 +232,7 @@ function Field({label,children}:{label:any;children:any}){return <label classNam
 function Table({headers,rows=[]}:{headers:any[];rows?:any[]}){return <div className="panel tableWrap"><table><thead><tr>{headers.map((h,i)=><th key={i}>{h}</th>)}</tr></thead><tbody>{rows.length?rows:<tr><td colSpan={headers.length} className="empty">沒有資料</td></tr>}</tbody></table></div>}
 function Login({loading,error}:{loading:boolean;error:string}){
   const [username,setUsername]=useState('')
-  const [personalAccount,setPersonalAccount]=useState('')
   const [password,setPassword]=useState('')
-  const [confirm,setConfirm]=useState('')
-  const [signup,setSignup]=useState(false)
   const [busy,setBusy]=useState(false)
   const [msg,setMsg]=useState('')
   const [resetting,setResetting]=useState(false)
@@ -252,7 +249,6 @@ function Login({loading,error}:{loading:boolean;error:string}){
     setBusy(false)
     if(r.error){const reason=(r.error as any).code||r.error.message;setMsg(reason==='email_not_confirmed'||r.error.message.includes('Email not confirmed')?'此帳號尚未完成 Email 確認，請聯絡管理員':'帳號或密碼錯誤')}
   }
-  const apply=async()=>{setMsg('');const account=personalAccount.trim().toLowerCase();if(!/^[a-z0-9._-]{3,30}$/.test(account))return setMsg('個人帳號請使用 3～30 個英數字、點、底線或連字號');if(!username.includes('@'))return setMsg('申請帳號請輸入有效 Email');if(password.length<8)return setMsg('密碼至少需要 8 個字元');if(password!==confirm)return setMsg('兩次輸入的密碼不一致');setBusy(true);const result=await registrationClient.auth.signUp({email:username.trim().toLowerCase(),password,username:account});setBusy(false);if(result.error)return setMsg(result.error.message);setMsg('申請完成，現在可使用個人帳號或 Email 登入')}
   const sendReset=async()=>{
     setMsg('');let email=username.trim().toLowerCase()===LOGIN_USERNAME?ALLOWED_EMAIL:username.trim().toLowerCase();if(!email.includes('@')){email=(await supabase.rpc('resolve_login',{p_login:email})).data||''}if(!email.includes('@'))return setMsg('請先輸入申請時使用的 Email 或個人帳號');setResetting(true)
     const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin})
@@ -260,12 +256,10 @@ function Login({loading,error}:{loading:boolean;error:string}){
     setMsg(error?'無法寄出重設郵件，請稍後再試':'密碼重設郵件已寄出，請於 60 分鐘內開啟信件中的連結')
   }
   return <div className="login simpleLogin">
-    <section className="loginPanel"><div className="loginCard"><div className="loginIdentity"><div className="brandMark big">HT</div><div><b>管理部｜庫存管理</b><span>管理部管理平台</span></div></div><h1>{signup?'申請管理帳號':'登入管理系統'}</h1><p>{signup?'設定個人帳號並填寫 Email':'請輸入個人帳號、Email 與密碼'}</p>{error&&<div className="notice error">{error}</div>}
-      {signup&&<Field label="個人帳號"><input type="text" value={personalAccount} onChange={e=>setPersonalAccount(e.target.value)} autoComplete="username" disabled={busy} placeholder="例如 wang.xiaoming"/></Field>}
-      <Field label={signup?'Email':'帳號／Email'}><input type={signup?'email':'text'} value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" disabled={busy} placeholder={signup?'name@company.com':'個人帳號或 Email'}/></Field>
-      <Field label="密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!signup)login()}} autoComplete={signup?'new-password':'current-password'} disabled={busy}/></Field>
-      {signup&&<Field label="確認密碼"><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')apply()}} autoComplete="new-password" disabled={busy}/></Field>}
-      {msg&&<div className={msg.includes('完成')||msg.includes('已寄出')?'notice':'notice error'}>{msg}</div>}<button className="primary wide" onClick={signup?apply:login} disabled={loading||busy}>{busy?'處理中…':signup?'申請帳號':'登入系統'}</button>{!signup&&<button className="textBtn" onClick={sendReset} disabled={resetting}>{resetting?'寄送中…':'忘記密碼？'}</button>}<button className="textBtn" onClick={()=>{setSignup(v=>!v);setMsg('');setPassword('');setConfirm('')}}>{signup?'返回登入':'申請新帳號'}</button><small>管理部管理平台</small>
+    <section className="loginPanel"><div className="loginCard"><div className="loginIdentity"><div className="brandMark big">HT</div><div><b>管理部｜庫存管理</b><span>管理部管理平台</span></div></div><h1>登入管理系統</h1><p>帳號由系統管理員統一建立</p>{error&&<div className="notice error">{error}</div>}
+      <Field label="帳號／Email"><input type="text" value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" disabled={busy} placeholder="個人帳號或 Email"/></Field>
+      <Field label="密碼"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')login()}} autoComplete="current-password" disabled={busy}/></Field>
+      {msg&&<div className={msg.includes('完成')||msg.includes('已寄出')?'notice':'notice error'}>{msg}</div>}<button className="primary wide" onClick={login} disabled={loading||busy}>{busy?'處理中…':'登入系統'}</button><button className="textBtn" onClick={sendReset} disabled={resetting}>{resetting?'處理中…':'忘記密碼？'}</button><small>管理部管理平台</small>
     </div></section>
   </div>
 }
