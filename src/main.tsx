@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { createClient } from '@supabase/supabase-js'
+import { cloudflareClient as supabase, createCloudflareClient } from './cloudflareClient'
 import * as XLSX from 'xlsx'
 import { Package, Wrench, Users, ArrowDownToLine, ArrowUpFromLine, Search, Plus, LogOut, X, RefreshCw, ChevronDown } from 'lucide-react'
 import './index.css'
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
-const registrationClient = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
+const registrationClient = createCloudflareClient({persistSession:false})
 const ALLOWED_EMAIL = 'htehssssss@gmail.com'
 const LOGIN_USERNAME = 'keker'
 
@@ -34,7 +33,7 @@ function App(){
   const [tools,setTools]=useState<Tool[]>([])
   const [toolMovements,setToolMovements]=useState<ToolMovement[]>([])
   const [modal,setModal]=useState<string|null>(null)
-  const isAdmin=session?.user?.email?.toLowerCase()===ALLOWED_EMAIL
+  const isAdmin=session?.user?.role==='admin'||session?.user?.email?.toLowerCase()===ALLOWED_EMAIL
   const workEnd=new Date(now); workEnd.setHours(17,0,0,0)
   const remaining=Math.max(0,workEnd.getTime()-now.getTime())
   const countdown=remaining>0
@@ -253,7 +252,7 @@ function Login({loading,error}:{loading:boolean;error:string}){
     setBusy(false)
     if(r.error){const reason=(r.error as any).code||r.error.message;setMsg(reason==='email_not_confirmed'||r.error.message.includes('Email not confirmed')?'此帳號尚未完成 Email 確認，請聯絡管理員':'帳號或密碼錯誤')}
   }
-  const apply=async()=>{setMsg('');const account=personalAccount.trim().toLowerCase();if(!/^[a-z0-9._-]{3,30}$/.test(account))return setMsg('個人帳號請使用 3～30 個英數字、點、底線或連字號');if(!username.includes('@'))return setMsg('申請帳號請輸入有效 Email');if(password.length<8)return setMsg('密碼至少需要 8 個字元');if(password!==confirm)return setMsg('兩次輸入的密碼不一致');setBusy(true);const result=await registrationClient.auth.signUp({email:username.trim().toLowerCase(),password});if(!result.error&&result.data.user){const mapped=await registrationClient.rpc('register_username',{p_user_id:result.data.user.id,p_username:account});if(mapped.error){setBusy(false);return setMsg(mapped.error.message)}}setBusy(false);if(result.error)return setMsg(result.error.message);setMsg('申請完成，現在可使用個人帳號或 Email 登入')}
+  const apply=async()=>{setMsg('');const account=personalAccount.trim().toLowerCase();if(!/^[a-z0-9._-]{3,30}$/.test(account))return setMsg('個人帳號請使用 3～30 個英數字、點、底線或連字號');if(!username.includes('@'))return setMsg('申請帳號請輸入有效 Email');if(password.length<8)return setMsg('密碼至少需要 8 個字元');if(password!==confirm)return setMsg('兩次輸入的密碼不一致');setBusy(true);const result=await registrationClient.auth.signUp({email:username.trim().toLowerCase(),password,username:account});setBusy(false);if(result.error)return setMsg(result.error.message);setMsg('申請完成，現在可使用個人帳號或 Email 登入')}
   const sendReset=async()=>{
     setMsg('');let email=username.trim().toLowerCase()===LOGIN_USERNAME?ALLOWED_EMAIL:username.trim().toLowerCase();if(!email.includes('@')){email=(await supabase.rpc('resolve_login',{p_login:email})).data||''}if(!email.includes('@'))return setMsg('請先輸入申請時使用的 Email 或個人帳號');setResetting(true)
     const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin})
@@ -364,8 +363,7 @@ function AdminAccountsPage(){
     if(password.length<8)return setMsg('密碼至少需要 8 個字元')
     if(password!==confirm)return setMsg('兩次輸入的密碼不一致')
     setBusy(true)
-    const result=await registrationClient.auth.signUp({email:email.trim().toLowerCase(),password})
-    if(!result.error&&result.data.user){const mapped=await registrationClient.rpc('register_username',{p_user_id:result.data.user.id,p_username:account});if(mapped.error){setBusy(false);return setMsg(mapped.error.message)}}
+    const result=await registrationClient.auth.signUp({email:email.trim().toLowerCase(),password,username:account})
     setBusy(false)
     if(result.error)return setMsg(result.error.message)
     setMsg('帳號申請完成');setEmail('');setPersonalAccount('');setPassword('');setConfirm('');loadAccounts()
