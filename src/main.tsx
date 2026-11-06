@@ -253,7 +253,7 @@ function Login({loading,error}:{loading:boolean;error:string}){
     setMsg('');let email=username.trim().toLowerCase()===LOGIN_USERNAME?ALLOWED_EMAIL:username.trim().toLowerCase();if(!email.includes('@')){email=(await supabase.rpc('resolve_login',{p_login:email})).data||''}if(!email.includes('@'))return setMsg('請先輸入申請時使用的 Email 或個人帳號');setResetting(true)
     const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin})
     setResetting(false)
-    setMsg(error?'無法寄出重設郵件，請稍後再試':'密碼重設郵件已寄出，請於 60 分鐘內開啟信件中的連結')
+
   }
   return <div className="login simpleLogin">
     <section className="loginPanel"><div className="loginCard"><div className="loginIdentity"><div className="brandMark big">HT</div><div><b>管理部｜庫存管理</b><span>管理部管理平台</span></div></div><h1>登入管理系統</h1><p>帳號由系統管理員統一建立</p>{error&&<div className="notice error">{error}</div>}
