@@ -237,7 +237,7 @@ function Login({loading,error}:{loading:boolean;error:string}){
   const [resetting,setResetting]=useState(false)
   const login=async()=>{
     setMsg('')
-    let email=username.trim().toLowerCase()===LOGIN_USERNAME?ALLOWED_EMAIL:username.trim().toLowerCase()
+    let email=username.trim()===LOGIN_USERNAME?ALLOWED_EMAIL:username.trim()
     if(!email.includes('@')){
       const resolved=await supabase.rpc('resolve_login',{p_login:email})
       email=resolved.data||''
@@ -249,7 +249,7 @@ function Login({loading,error}:{loading:boolean;error:string}){
     if(r.error){const reason=(r.error as any).code||r.error.message;setMsg(reason==='email_not_confirmed'||r.error.message.includes('Email not confirmed')?'此帳號尚未完成 Email 確認，請聯絡管理員':'帳號或密碼錯誤')}
   }
   const sendReset=async()=>{await confirmDialog('我還不打鼠你 ๛ก(ｰ̀ωｰ́ก)');return;
-    setMsg('');let email=username.trim().toLowerCase()===LOGIN_USERNAME?ALLOWED_EMAIL:username.trim().toLowerCase();if(!email.includes('@')){email=(await supabase.rpc('resolve_login',{p_login:email})).data||''}if(!email.includes('@'))return setMsg('請先輸入申請時使用的 Email 或個人帳號');setResetting(true)
+    setMsg('');let email=username.trim()===LOGIN_USERNAME?ALLOWED_EMAIL:username.trim();if(!email.includes('@')){email=(await supabase.rpc('resolve_login',{p_login:email})).data||''}if(!email.includes('@'))return setMsg('請先輸入申請時使用的 Email 或個人帳號');setResetting(true)
     const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin})
     setResetting(false)
 
@@ -350,8 +350,8 @@ function AdminAccountsPage(){
   const loadAccounts=async()=>{const r=await supabase.rpc('admin_list_accounts');if(r.error)setMsg(r.error.message);else setAccounts(r.data||[])}
   useEffect(()=>{loadAccounts()},[])
   const apply=async()=>{
-    setMsg('');const account=personalAccount.trim().toLowerCase()
-    if(!/^[a-z0-9._-]{3,30}$/.test(account))return setMsg('個人帳號請使用 3～30 個英數字、點、底線或連字號')
+    setMsg('');const account=personalAccount.trim()
+    if(!/^[a-z0-9._-]{3,30}$/i.test(account))return setMsg('個人帳號請使用 3～30 個大小寫英數字、點、底線或連字號')
     void email
     if(password.length<4)return setMsg('密碼至少需要 4 個字元')
     if(password!==confirm)return setMsg('兩次輸入的密碼不一致')
