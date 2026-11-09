@@ -44,8 +44,8 @@ async function auth(request:Request,env:Env,path:string){
   if(path==='/auth/password'){const user=await requireUser(request,env);const {password}=await request.json<any>();if(String(password).length<4)return json('密碼至少需要 4 個字元',400);const encoded=await hashPassword(String(password));await env.DB.prepare('UPDATE users SET password_hash=?,password_salt=? WHERE id=?').bind(encoded.hash,encoded.salt,user.id).run();return json({user})}
   return json('找不到登入功能',404)
 }
-async function rpc(request:Request,env:Env,name:string){const user=await requireUser(request,env);const p:any=await request.json();
-  if(name==='resolve_login'){const row=await env.DB.prepare('SELECT email FROM users WHERE username=? COLLATE NOCASE OR email=? COLLATE NOCASE').bind(p.p_login,p.p_login).first<any>();return json(row?.email||null)}
+async function rpc(request:Request,env:Env,name:string){const p:any=await request.json();
+  if(name==='resolve_login'){const login=String(p.p_login||'').trim();const row=await env.DB.prepare('SELECT email FROM users WHERE username=? COLLATE NOCASE OR email=? COLLATE NOCASE').bind(login,login).first<any>();return json(row?.email||null)} const user=await requireUser(request,env);
   if(name==='register_username'){await env.DB.prepare('UPDATE users SET username=? WHERE id=?').bind(String(p.p_username).toLowerCase(),p.p_user_id).run();return json(true)}
   if(name==='admin_list_accounts'){if(user.role!=='admin')return json('僅限管理主帳號',403);return json((await env.DB.prepare('SELECT id user_id,username,role,created_at FROM users ORDER BY created_at').all()).results)}
 
