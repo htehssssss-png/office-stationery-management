@@ -90,7 +90,7 @@ function App(){
           </div>}
         </div>
       </nav>
-      <button className="accountChip" onClick={()=>setModal('password')} title="修改自己的密碼">{isAdmin?'keker':session.user.email}</button>
+      <button className="accountChip" onClick={()=>setModal('password')} title="修改自己的密碼">{session.user.username||session.user.email.replace('@local.invalid','')}</button>
       <button className="ghostBtn navLogout" onClick={()=>supabase.auth.signOut()}><LogOut size={17}/>登出</button>
     </header>
     <main className="main">
