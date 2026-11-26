@@ -132,14 +132,59 @@ async function readCsvText(file:File){const buffer=await file.arrayBuffer();cons
 const stationeryImportHeaders=['商品編號','名稱','規格','類別','單位','庫存','安全庫存','位置','備註']
 const toolImportHeaders=['料號','名稱','規格','管理編號','類別','單位','庫存','安全庫存','位置','備註']
 const inventoryHeaderAliases=[['料號','商品編號／料號','商品編號'],['名稱','品項','品名'],['規格'],['類別','分類'],['單位'],['庫存','數量'],['安全庫存','庫存安全','安全庫存量'],['位置','存放位置'],['備註'],['管理編號','管理編號／序號','序號／編號','序號']]
-async function readInventoryFile(file:File){const lower=file.name.toLowerCase();let workbook:XLSX.WorkBook;if(lower.endsWith('.csv')){workbook=XLSX.read(await readCsvText(file),{type:'string'})}else if(lower.endsWith('.xlsx')||lower.endsWith('.xls')){workbook=XLSX.read(await file.arrayBuffer(),{type:'array'})}else throw new Error('請選擇 Excel（.xlsx／.xls）或 CSV 檔案');const sheet=workbook.Sheets[workbook.SheetNames[0]];if(!sheet)throw new Error('檔案中找不到工作表');const rows=XLSX.utils.sheet_to_json<any[]>(sheet,{header:1,defval:'',raw:false});if(rows.length<2)throw new Error('檔案內沒有可匯入的資料');const headers=rows[0].map(x=>String(x).replace(/^\ufeff/,'').trim().replace(/\s+/g,''));const indexes=inventoryHeaderAliases.map(names=>headers.findIndex(h=>names.includes(h)));if(indexes[1]<0)throw new Error('找不到「名稱」欄位，請依序使用：料號、名稱、規格、類別、單位、庫存、安全庫存、位置、備註');return rows.slice(1).map(row=>indexes.map(i=>i<0?'':String(row[i]??'').trim())).filter(row=>row[1])}
-function downloadInventoryTemplate(filename:string,headers:string[],example:string[]){const sheet=XLSX.utils.aoa_to_sheet([headers,example]);sheet['!cols']=[16,18,16,16,10,10,12,14,24].map(w=>({wch:w}));const workbook=XLSX.utils.book_new();XLSX.utils.book_append_sheet(workbook,sheet,'庫存匯入');XLSX.writeFile(workbook,filename)}
+async function readInventoryFile(file:File, kind: 'stationery' | 'tool'){const lower=file.name.toLowerCase();let workbook:XLSX.WorkBook;if(lower.endsWith('.csv')){workbook=XLSX.read(await readCsvText(file),{type:'string'})}else if(lower.endsWith('.xlsx')||lower.endsWith('.xls')){workbook=XLSX.read(await file.arrayBuffer(),{type:'array'})}else throw new Error('請選擇 Excel（.xlsx／.xls）或 CSV 檔案');const sheet=workbook.Sheets[workbook.SheetNames[0]];if(!sheet)throw new Error('檔案中找不到工作表');const rows=XLSX.utils.sheet_to_json<any[]>(sheet,{header:1,defval:'',raw:false});if(rows.length<2)throw new Error('檔案內沒有可匯入的資料');const headers=rows[0].map(x=>String(x).replace(/^\ufeff/,'').trim().replace(/\s+/g,''));const indexes=inventoryHeaderAliases.map(names=>headers.findIndex(h=>names.includes(h)));const required = kind === 'tool' ? [1, 9] : [1];
+ const labels = kind === 'tool' ? toolImportHeaders : stationeryImportHeaders;
+ for (const i of required) {
+   if (indexes[i] < 0) throw new Error(`缺少「${inventoryHeaderAliases[i][0]}」欄位。請使用範本欄位：${labels.join('、')}`);
+ }
+ const records = rows.slice(1).flatMap((row, index) => {
+   if (!row.some(cell => String(cell ?? '').trim())) return [];
+   const values = indexes.map(i => i < 0 ? '' : String(row[i] ?? '').trim());
+   for (const i of required) {
+     if (!values[i]) throw new Error(`第 ${index + 2} 列缺少「${i === 9 ? '管理編號' : '名稱'}」`);
+   }
+   for (const i of [5, 6]) {
+     if (values[i] && (!/^\d+$/.test(values[i]) || !Number.isSafeInteger(Number(values[i])))) {
+       throw new Error(`第 ${index + 2} 列的「${inventoryHeaderAliases[i][0]}」須為 0 或正整數`);
+     }
+   }
+   return [values];
+ });
+ if (!records.length) throw new Error('檔案內沒有可匯入的資料');
+ return records;
+}
+function downloadInventoryTemplate(kind: 'stationery' | 'tool') {
+ const tool = kind === 'tool';
+ const headers = tool ? toolImportHeaders : stationeryImportHeaders;
+ const workbook = XLSX.utils.book_new();
+ const sheet = XLSX.utils.aoa_to_sheet([headers]);
+ sheet['!cols'] = headers.map(header => ({wch: header === '備註' ? 28 : 16}));
+ XLSX.utils.book_append_sheet(workbook, sheet, '庫存匯入');
+
+ const example = tool
+   ? ['TEST-999','安全帶','標準型','SB01～SB26','安全防護','條',1,0,'T-01','逐件管理']
+   : ['TEST-888','原子筆','0.5mm','書寫用品','支',100,20,'A-01','藍色'];
+ const instructions = XLSX.utils.aoa_to_sheet([
+   ['填寫說明'],
+   ['在「庫存匯入」工作表從第 2 列開始填寫。保留首列欄位名稱。'],
+   [tool ? '名稱和管理編號必填。管理編號可填單一編號或 SB01～SB26。' : '名稱必填。商品編號可留空。'],
+   [tool ? '單一編號的庫存空白時以 1 計算。有效的編號區間會拆成多筆，每筆庫存為 1。' : '庫存空白時以 0 計算。'],
+   ['庫存與安全庫存填 0 或正整數。安全庫存空白時以 0 計算。'],
+   ['單位可留空，預設為「個」。需要保留前導零的編號請先把儲存格設為文字。'],
+   [],
+   headers,
+   example,
+ ]);
+ instructions['!cols'] = sheet['!cols'];
+ XLSX.utils.book_append_sheet(workbook, instructions, '填寫說明');
+ XLSX.writeFile(workbook, tool ? '個人工具批次新增範本.xlsx' : '文具批次新增範本.xlsx');
+}
 function expandSerialRange(value:string){const text=value.trim();if(!text)return [''];const match=text.match(/^([^\d]*)(\d+)\s*[~～]\s*([^\d]*)(\d+)$/);if(!match)return [text];const [,leftPrefix,startText,rightPrefix,endText]=match;if(rightPrefix&&rightPrefix!==leftPrefix)return [text];const start=Number(startText),end=Number(endText);if(!Number.isInteger(start)||!Number.isInteger(end)||end<start||end-start>499)return [text];const width=Math.max(startText.length,endText.length);return Array.from({length:end-start+1},(_,i)=>`${leftPrefix}${String(start+i).padStart(width,'0')}`)}
 function ItemsPage({items,onDone}:{items:Item[];onDone:()=>void}){
   const [q,setQ]=useState('');const [msg,setMsg]=useState('');const [selected,setSelected]=useState<string[]>([]);const [editing,setEditing]=useState<Item|null>(null)
   const rows=items.filter(x=>((x.item_code||'')+x.name+x.spec+x.category).toLowerCase().includes(q.toLowerCase()))
-  const template=()=>downloadInventoryTemplate('文具批次新增範本.xlsx',stationeryImportHeaders,['TEST-888','原子筆','0.5mm','書寫用品','支','100','20','A-01','藍色'])
-  const importFile=async(e:React.ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];if(!file)return;setMsg('');try{const rows=await readInventoryFile(file);const data=rows.map(c=>({item_code:c[0]||'',name:c[1],spec:c[2]||'',category:c[3]||'',unit:c[4]||'個',stock:Number(c[5]||0),safety_stock:Number(c[6]||0),location:c[7]||'',note:c[8]||''}));const user=(await supabase.auth.getUser()).data.user;const {error}=await supabase.from('items').insert(data.map(x=>({...x,owner_id:user!.id})));setMsg(error?error.message:`已批次新增 ${data.length} 筆文具`);if(!error)onDone()}catch(error:any){setMsg(error.message||'檔案無法讀取')}finally{e.target.value=''}}
+  const template=()=>downloadInventoryTemplate('stationery')
+  const importFile=async(e:React.ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];if(!file)return;setMsg('');try{const rows=await readInventoryFile(file,'stationery');const data=rows.map(c=>({item_code:c[0]||'',name:c[1],spec:c[2]||'',category:c[3]||'',unit:c[4]||'個',stock:Number(c[5]||0),safety_stock:Number(c[6]||0),location:c[7]||'',note:c[8]||''}));const user=(await supabase.auth.getUser()).data.user;const {error}=await supabase.from('items').insert(data.map(x=>({...x,owner_id:user!.id})));setMsg(error?error.message:`已批次新增 ${data.length} 筆文具`);if(!error)onDone()}catch(error:any){setMsg(error.message||'檔案無法讀取')}finally{e.target.value=''}}
   const removeSelected=async()=>{if(!selected.length)return;if(!await confirmDialog(`確定刪除已勾選的 ${selected.length} 筆文具？`))return;const {error}=await supabase.from('items').delete().in('id',selected);setMsg(error?error.message:`已刪除 ${selected.length} 筆文具`);if(!error){setSelected([]);onDone()}}
   const toggle=(id:string)=>setSelected(selected.includes(id)?selected.filter(x=>x!==id):[...selected,id])
   const allSelected=rows.length>0&&rows.every(x=>selected.includes(x.id));const toggleAll=()=>setSelected(allSelected?selected.filter(id=>!rows.some(x=>x.id===id)):[...new Set([...selected,...rows.map(x=>x.id)])])
@@ -159,41 +204,27 @@ function MovementsPage({movements,toolMovements,isAdmin,onDone}:{movements:Movem
  const [page,setPage]=useState(1);
  const [msg,setMsg]=useState('');
  const [showDeleted,setShowDeleted]=useState(false);
- const filtered=rows.filter(x=>(showDeleted?x.note.startsWith(deletedMark):!x.note.startsWith(deletedMark))&&(!filters.date||x.date.slice(0,10)===filters.date)&&(!filters.cat||x.cat===filters.cat)&&(!filters.item||`${x.item} ${x.spec}`.toLowerCase().includes(filters.item.toLowerCase()))&&(!filters.person||x.person.toLowerCase().includes(filters.person.toLowerCase()))&&(!filters.dept||x.dept.toLowerCase().includes(filters.dept.toLowerCase()))&&(!filters.action||x.action===filters.action));
+ const [pendingDeletes,setPendingDeletes]=useState<Set<string>>(new Set());
+ const [pendingOnly,setPendingOnly]=useState(false);
+ const loadPendingDeletes=async()=>{
+   const result=await supabase.rpc('list_movement_delete_requests');
+   if(result.error){setMsg(result.error.message);return}
+   setPendingDeletes(new Set((result.data||[]).map((row:any)=>row.movement_table+':'+row.movement_id)));
+ };
+ useEffect(()=>{void loadPendingDeletes()},[]);
+ const filtered=rows.filter(x=>(!pendingOnly||pendingDeletes.has(x.table+':'+x.rawId))&&(showDeleted?x.note.startsWith(deletedMark):!x.note.startsWith(deletedMark))&&(!filters.date||x.date.slice(0,10)===filters.date)&&(!filters.cat||x.cat===filters.cat)&&(!filters.item||`${x.item} ${x.spec}`.toLowerCase().includes(filters.item.toLowerCase()))&&(!filters.person||x.person.toLowerCase().includes(filters.person.toLowerCase()))&&(!filters.dept||x.dept.toLowerCase().includes(filters.dept.toLowerCase()))&&(!filters.action||x.action===filters.action));
  const totalPages=Math.ceil(filtered.length/20);
  const currentPage=Math.min(page,Math.max(1,totalPages));
  const pageRows=filtered.slice((currentPage-1)*20,currentPage*20);
  useEffect(()=>setPage(1),[filters]);
  const change=(key:keyof typeof blank,value:string)=>setDraft({...draft,[key]:value});
- const markDeleted=async(x:typeof rows[number])=>{
- if(x.note.startsWith(deletedMark))return;
- if(!await confirmDialog('確定標示刪除並還原這筆紀錄造成的庫存變動？原始紀錄仍會保留。'))return;
- setMsg('');
-  if(x.cat==='個人工具'&&x.action==='進貨'){
-   const laterResult=await supabase.from('tool_movements').select('id,date,note').eq('tool_id',x.inventoryId).neq('id',x.rawId).gt('date',x.date);
-   if(laterResult.error)return setMsg(`無法檢查後續紀錄：${laterResult.error.message}`);
-   const laterActive=(laterResult.data||[]).some((movement:any)=>!String(movement.note||'').startsWith(deletedMark));
-   if(laterActive)return setMsg('無法刪除：此管理編號在進貨後已有領用或退還紀錄，請先處理後續紀錄');
-   const toolResult=await supabase.from('tools').select('stock,status,holder,department,issue_date').eq('id',x.inventoryId).single();
-   if(toolResult.error)return setMsg(`無法取得工具狀態：${toolResult.error.message}`);
-   const previous=toolResult.data;
-   const toolUpdate=await supabase.from('tools').update({stock:0,status:'已刪除',holder:'',department:'',issue_date:''}).eq('id',x.inventoryId).select('id').maybeSingle();
-   if(toolUpdate.error||!toolUpdate.data)return setMsg(`工具入庫撤銷失敗：${toolUpdate.error?.message||'找不到工具'}`);
-   const movementUpdate=await supabase.from('tool_movements').update({note:`${deletedMark}${x.note}`}).eq('id',x.rawId).select('id').maybeSingle();
-   if(movementUpdate.error||!movementUpdate.data){await supabase.from('tools').update(previous).eq('id',x.inventoryId);return setMsg(`紀錄標示失敗：${movementUpdate.error?.message||'找不到紀錄'}`)}
-   setMsg(`已標示刪除，管理編號 ${x.spec||''} 的進貨已撤銷`);onDone();return;
-  }
-  const stockResult=await supabase.from(x.inventoryTable).select('stock').eq('id',x.inventoryId).single();
-  if(stockResult.error)return setMsg(`無法取得目前庫存：${stockResult.error.message}`);
-  const currentStock=Number(stockResult.data?.stock||0);
-  const nextStock=currentStock+(x.action==='領用'?Number(x.qty):-Number(x.qty));
-  if(nextStock<0)return setMsg(`無法刪除：還原後庫存會變成 ${nextStock}`);
-  const inventoryUpdate=await supabase.from(x.inventoryTable).update({stock:nextStock}).eq('id',x.inventoryId).eq('stock',currentStock).select('id').maybeSingle();
-  if(inventoryUpdate.error)return setMsg(`庫存還原失敗：${inventoryUpdate.error.message}`);
-  if(!inventoryUpdate.data)return setMsg('庫存剛被其他人更新，請重新整理後再試');
-  const movementUpdate=await supabase.from(x.table).update({note:`${deletedMark}${x.note}`}).eq('id',x.rawId).select('id').maybeSingle();
-  if(movementUpdate.error||!movementUpdate.data){const rollback=await supabase.from(x.inventoryTable).update({stock:currentStock}).eq('id',x.inventoryId).eq('stock',nextStock);return setMsg(rollback.error?'紀錄標示失敗，且庫存無法自動回復，請通知管理員':`紀錄標示失敗：${movementUpdate.error?.message||'找不到紀錄'}`)}
-  setMsg(`已標示刪除，庫存由 ${currentStock} 還原為 ${nextStock}`);onDone();
+ const handleDelete=async(x:typeof rows[number], approve=false)=>{
+   if(!await confirmDialog(approve?'核准刪除並還原這筆紀錄的庫存變動？':'送出刪除申請，交由管理員核准？'))return;
+   const result=await supabase.rpc(approve?'approve_movement_delete':'request_movement_delete',{p_table:x.table,p_id:x.rawId});
+   if(result.error){await loadPendingDeletes();setMsg(result.error.message);return}
+   await loadPendingDeletes();
+   setMsg(approve?'已標示刪除並還原庫存':'已送出刪除申請');
+   if(approve)onDone();
  };
  const restoreDeleted=async(x:typeof rows[number])=>{
  if(!x.note.startsWith(deletedMark)||!await confirmDialog('確定恢復這筆紀錄並重新套用庫存變動？'))return;
@@ -222,7 +253,7 @@ function MovementsPage({movements,toolMovements,isAdmin,onDone}:{movements:Movem
   if(movementUpdate.error||!movementUpdate.data){const rollback=await supabase.from(x.inventoryTable).update({stock:currentStock}).eq('id',x.inventoryId).eq('stock',nextStock);return setMsg(rollback.error?'紀錄恢復失敗，且庫存無法自動回復，請通知管理員':`紀錄恢復失敗：${movementUpdate.error?.message||'找不到紀錄'}`)}
   setMsg(`已恢復紀錄，庫存由 ${currentStock} 更新為 ${nextStock}`);onDone();
  };
- return <div className="content"><div className="panel movementFilters"><div className="movementFilterGrid"><Field label="日期"><input type="date" value={draft.date} onChange={e=>change('date',e.target.value)}/></Field><Field label="類別"><select value={draft.cat} onChange={e=>change('cat',e.target.value)}><option value="">全部</option><option>文具</option><option>個人工具</option></select></Field><Field label="品項／規格"><input value={draft.item} onChange={e=>change('item',e.target.value)} placeholder="輸入品項或規格"/></Field><Field label="人員"><input value={draft.person} onChange={e=>change('person',e.target.value)} placeholder="輸入人員"/></Field><Field label="部門"><input value={draft.dept} onChange={e=>change('dept',e.target.value)} placeholder="輸入部門"/></Field><Field label="動作"><select value={draft.action} onChange={e=>change('action',e.target.value)}><option value="">全部</option><option>領用</option><option>入庫</option><option>進貨</option><option>歸還</option></select></Field></div><div className="filterActions">{isAdmin&&<button className="smallBtn" onClick={()=>{setShowDeleted(!showDeleted);setPage(1);setMsg('')}}>{showDeleted?'返回紀錄查詢':'已刪除紀錄'}</button>}<button className="smallBtn" onClick={()=>{setDraft(blank);setFilters(blank);setSortOrder('desc');setPage(1)}}>清除</button><label className="sortAction"><span>排序</span><select value={sortOrder} onChange={e=>{setSortOrder(e.target.value as 'desc'|'asc');setPage(1)}}><option value="desc">時間：新到舊</option><option value="asc">時間：舊到新</option></select></label><button className="primary" onClick={()=>setFilters(draft)}><Search size={17}/>搜尋</button></div></div>{showDeleted&&<div className="notice">回收區：恢復後會重新套用該筆紀錄的庫存變動</div>}{msg&&<div className={msg.includes('已標示')||msg.includes('已恢復')?'notice':'notice error'}>{msg}</div>}<Table headers={['日期／時間','類別','品項','規格／序號','數量','人員','部門','動作','備註','操作']} rows={pageRows.map(x=>{const deleted=x.note.startsWith(deletedMark);const shownNote=x.note.replace(deletedMark,'');const timestamp=new Date(x.date);return <tr key={x.id} className={deleted?'deletedRecord':''}><td>{Number.isNaN(timestamp.getTime())?x.date:timestamp.toLocaleString('zh-TW',{hour12:false})}</td><td>{x.cat}</td><td>{x.item}</td><td>{x.spec||'-'}</td><td>{x.qty}</td><td>{x.person||'-'}</td><td>{x.dept||'-'}</td><td>{x.action}</td><td>{shownNote||'-'}{deleted&&<span className="deletedBadge">已刪除</span>}</td><td>{deleted?<button className="smallBtn" onClick={()=>restoreDeleted(x)}>恢復</button>:<button className="smallBtn dangerBtn" onClick={()=>markDeleted(x)}>刪除</button>}</td></tr>})}/><div className="pagination"><button className="pageBtn" disabled={currentPage<=1} onClick={()=>setPage(currentPage-1)}>上一頁</button><div className="pageNumbers">{Array.from({length:totalPages},(_,i)=>i+1).map(n=><button key={n} className={n===currentPage?'pageBtn active':'pageBtn'} onClick={()=>setPage(n)}>{n}</button>)}</div><button className="pageBtn" disabled={currentPage>=totalPages} onClick={()=>setPage(currentPage+1)}>下一頁</button><span>共 {totalPages} 頁</span></div></div>
+ return <div className="content"><div className="panel movementFilters"><div className="movementFilterGrid"><Field label="日期"><input type="date" value={draft.date} onChange={e=>change('date',e.target.value)}/></Field><Field label="類別"><select value={draft.cat} onChange={e=>change('cat',e.target.value)}><option value="">全部</option><option>文具</option><option>個人工具</option></select></Field><Field label="品項／規格"><input value={draft.item} onChange={e=>change('item',e.target.value)} placeholder="輸入品項或規格"/></Field><Field label="人員"><input value={draft.person} onChange={e=>change('person',e.target.value)} placeholder="輸入人員"/></Field><Field label="部門"><input value={draft.dept} onChange={e=>change('dept',e.target.value)} placeholder="輸入部門"/></Field><Field label="動作"><select value={draft.action} onChange={e=>change('action',e.target.value)}><option value="">全部</option><option>領用</option><option>入庫</option><option>進貨</option><option>歸還</option></select></Field></div><div className="filterActions">{isAdmin&&!showDeleted&&<button className="smallBtn" onClick={()=>{setPendingOnly(!pendingOnly);setPage(1);void loadPendingDeletes()}}>{pendingOnly?'顯示全部':'待核准刪除'}</button>}{isAdmin&&<button className="smallBtn" onClick={()=>{setShowDeleted(!showDeleted);setPendingOnly(false);setPage(1);setMsg('')}}>{showDeleted?'返回紀錄查詢':'已刪除紀錄'}</button>}<button className="smallBtn" onClick={()=>{setDraft(blank);setFilters(blank);setSortOrder('desc');setPage(1)}}>清除</button><label className="sortAction"><span>排序</span><select value={sortOrder} onChange={e=>{setSortOrder(e.target.value as 'desc'|'asc');setPage(1)}}><option value="desc">時間：新到舊</option><option value="asc">時間：舊到新</option></select></label><button className="primary" onClick={()=>setFilters(draft)}><Search size={17}/>搜尋</button></div></div>{showDeleted&&<div className="notice">回收區：恢復後會重新套用該筆紀錄的庫存變動</div>}{msg&&<div className={msg.includes('已標示')||msg.includes('已恢復')?'notice':'notice error'}>{msg}</div>}<Table headers={['日期／時間','類別','品項','規格／序號','數量','人員','部門','動作','備註','操作']} rows={pageRows.map(x=>{const deleted=x.note.startsWith(deletedMark);const shownNote=x.note.replace(deletedMark,'');const timestamp=new Date(x.date);return <tr key={x.id} className={deleted?'deletedRecord':''}><td>{Number.isNaN(timestamp.getTime())?x.date:timestamp.toLocaleString('zh-TW',{hour12:false})}</td><td>{x.cat}</td><td>{x.item}</td><td>{x.spec||'-'}</td><td>{x.qty}</td><td>{x.person||'-'}</td><td>{x.dept||'-'}</td><td>{x.action}</td><td>{shownNote||'-'}{deleted&&<span className="deletedBadge">已刪除</span>}</td><td>{deleted?<button className="smallBtn" onClick={()=>restoreDeleted(x)}>恢復</button>:pendingDeletes.has(x.table+':'+x.rawId)?<>{isAdmin?<button className="smallBtn dangerBtn" onClick={()=>handleDelete(x,true)}>核准刪除</button>:<span>待核准</span>}</>:<button className="smallBtn dangerBtn" onClick={()=>handleDelete(x)}>刪除</button>}</td></tr>})}/><div className="pagination"><button className="pageBtn" disabled={currentPage<=1} onClick={()=>setPage(currentPage-1)}>上一頁</button><div className="pageNumbers">{Array.from({length:totalPages},(_,i)=>i+1).map(n=><button key={n} className={n===currentPage?'pageBtn active':'pageBtn'} onClick={()=>setPage(n)}>{n}</button>)}</div><button className="pageBtn" disabled={currentPage>=totalPages} onClick={()=>setPage(currentPage+1)}>下一頁</button><span>共 {totalPages} 頁</span></div></div>
 }
 function PeoplePage({people,onAdd,onDone}:{people:Person[];movements:Movement[];toolMovements:ToolMovement[];onAdd:()=>void;onDone:()=>void}){const [q,setQ]=useState('');const [editing,setEditing]=useState(false);const rows=people.filter(x=>(x.name+x.department).includes(q)).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));return <div className="content"><div className="toolbar"><div className="search"><Search size={17}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="搜尋…"/></div><button className="smallBtn" onClick={()=>setEditing(true)}>編輯人員</button><button className="primary" onClick={onAdd}><Plus size={17}/>新增人員</button></div><Table headers={['姓名','部門','狀態','到職日']} rows={rows.map(x=><tr key={x.id}><td><b>{x.name}</b></td><td>{x.department||'-'}</td><td>{x.active?'在職':'停用'}</td><td>{x.created_at?new Date(x.created_at).toLocaleDateString('zh-TW'):'-'}</td></tr>)}/>{editing&&<BulkEditPeopleModal people={people} onClose={()=>setEditing(false)} onDone={()=>{setEditing(false);onDone()}}/>}</div>}
 function ToolsPage({tools,onAdd,onDone}:{tools:Tool[];onAdd:()=>void;onDone:()=>void}){const [q,setQ]=useState('');const move=async(t:Tool,type:'out'|'in')=>{if(type==='out')return;const r=await supabase.rpc('move_tool',{p_tool_id:t.id,p_type:'in',p_person:'',p_department:'',p_note:''});if(!r.error)onDone()};return <div className="content"><Toolbar q={q} setQ={setQ} add={onAdd} label="新增工具"/><Table headers={['工具名稱','規格','序號／編號','保管人','部門','領用日期','狀態','備註']} rows={tools.filter(x=>(x.name+x.spec+x.serial+x.holder+x.department).toLowerCase().includes(q.toLowerCase())).map(x=><tr key={x.id}><td><b>{x.name}</b></td><td>{x.spec}</td><td>{x.serial}</td><td>{x.holder||'-'}</td><td>{x.department||'-'}</td><td>{x.issue_date||'-'}</td><td>{x.status||'在庫'}</td><td>{x.note||'-'} {x.status==='已領用'&&<button className="smallBtn" onClick={()=>move(x,'in')}>歸還</button>}</td></tr>)}/></div>}
@@ -291,8 +322,8 @@ function ToolsInventoryPage({tools,toolMovements,onAdd,onDone}:{tools:Tool[];too
   const [expanded,setExpanded]=useState<string[]>([])
   const rows=tools.filter(x=>x.status!=='已刪除'&&((x.item_code||'')+x.name+(x.spec||'')+(x.category||'')+(x.serial||'')).toLowerCase().includes(q.toLowerCase()))
   const groups=Object.values(rows.reduce((all,tool)=>{const code=String(tool.item_code||'').trim();const key=code?`code:${code}`:`item:${tool.name}|${tool.spec||''}|${tool.category||''}|${tool.unit||''}`;(all[key]??={key,tools:[] as Tool[]}).tools.push(tool);return all},{} as Record<string,{key:string;tools:Tool[]}>))
-  const template=()=>downloadInventoryTemplate('個人工具批次新增範本.xlsx',toolImportHeaders,['TEST-999','安全帶','標準型','SB01～SB26','安全防護','條','1','0','T-01','逐件管理'])
-  const importFile=async(e:React.ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];if(!file)return;setMsg('');try{const rows=await readInventoryFile(file);const missing=rows.findIndex(c=>!String(c[9]||'').trim());if(missing>=0)throw new Error(`第 ${missing+2} 列缺少必填的「管理編號」`);const data=rows.flatMap(c=>{const serials=expandSerialRange(c[9]);return serials.map(serial=>({item_code:c[0]||'',name:c[1],spec:c[2]||'',category:c[3]||'',unit:c[4]||'個',stock:serials.length>1?1:Number(c[5]||1),safety_stock:Number(c[6]||0),location:c[7]||'',note:c[8]||'',serial,holder:'',department:'',issue_date:'',status:'在庫'}))});const user=(await supabase.auth.getUser()).data.user;const {error}=await supabase.from('tools').insert(data.map(x=>({...x,owner_id:user!.id})));setMsg(error?error.message:`已批次新增 ${data.length} 筆個人工具`);if(!error)onDone()}catch(error:any){setMsg(error.message||'檔案無法讀取')}finally{e.target.value=''}}
+  const template=()=>downloadInventoryTemplate('tool')
+  const importFile=async(e:React.ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];if(!file)return;setMsg('');try{const rows=await readInventoryFile(file,'tool');const data=rows.flatMap(c=>{const serials=expandSerialRange(c[9]);return serials.map(serial=>({item_code:c[0]||'',name:c[1],spec:c[2]||'',category:c[3]||'',unit:c[4]||'個',stock:serials.length>1?1:Number(c[5]||1),safety_stock:Number(c[6]||0),location:c[7]||'',note:c[8]||'',serial,holder:'',department:'',issue_date:'',status:'在庫'}))});const user=(await supabase.auth.getUser()).data.user;const {error}=await supabase.from('tools').insert(data.map(x=>({...x,owner_id:user!.id})));setMsg(error?error.message:`已批次新增 ${data.length} 筆個人工具`);if(!error)onDone()}catch(error:any){setMsg(error.message||'檔案無法讀取')}finally{e.target.value=''}}
   const exportReport=()=>{const data=rows.map(x=>({'料號':x.item_code||'','管理編號':x.serial||'','名稱':x.name,'規格':x.spec||'','單位':x.unit||'個','工務所庫存':Number(x.stock||0),'辦公室庫存':'','庫存總量':'','ERP數量':'','差異量':'','位置':x.location||'','備註':x.note||''}));const sheet=XLSX.utils.json_to_sheet(data);sheet['!cols']=[14,14,22,18,10,14,14,14,12,12,14,24].map(w=>({wch:w}));const workbook=XLSX.utils.book_new();XLSX.utils.book_append_sheet(workbook,sheet,'個人工具庫存');XLSX.writeFile(workbook,`個人工具庫存報表_${new Date().toISOString().slice(0,10)}.xlsx`)}
   const toggle=(id:string)=>setSelected(selected.includes(id)?selected.filter(x=>x!==id):[...selected,id])
   const toggleGroup=(group:{tools:Tool[]})=>{const ids=group.tools.map(x=>x.id);const checked=ids.every(id=>selected.includes(id));setSelected(checked?selected.filter(id=>!ids.includes(id)):[...new Set([...selected,...ids])])}
