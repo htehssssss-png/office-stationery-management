@@ -25,6 +25,13 @@ async function ensureSchema(env:Env){if(schemaReady)return;const statements=[
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_movement_delete
     ON movement_delete_requests(movement_table, movement_id) WHERE approved_at IS NULL`,
+  `CREATE TABLE IF NOT EXISTS data_delete_requests (
+    id TEXT PRIMARY KEY, target_table TEXT NOT NULL, target_id TEXT NOT NULL,
+    target_label TEXT NOT NULL, requester_id TEXT NOT NULL,
+    requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, approver_id TEXT, approved_at TEXT
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_data_delete
+    ON data_delete_requests(target_table,target_id) WHERE approved_at IS NULL`,
   `CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_movements_date ON movements(date)`,
   `CREATE INDEX IF NOT EXISTS idx_tool_movements_date ON tool_movements(date)`
@@ -38,8 +45,20 @@ function fields(table:string,values:any){const allowed=TABLES[table];if(!allowed
 function filtersSql(table:string,filters:any[]=[]){const allowed=TABLES[table];const parts:string[]=[];const args:any[]=[];for(const f of filters){if(!allowed?.has(f.field))throw new Error('不允許的篩選欄位');if(f.op==='in'){const values=Array.isArray(f.value)?f.value:[];if(!values.length){parts.push('1=0');continue}parts.push(`${f.field} IN (${values.map(()=>'?').join(',')})`);args.push(...values)}else{const op:{[key:string]:string}={eq:'=',neq:'!=',gt:'>'};if(!op[f.op])throw new Error('不允許的篩選條件');parts.push(`${f.field} ${op[f.op]} ?`);args.push(f.value)}}return {sql:parts.length?` WHERE ${parts.join(' AND ')}`:'',args}}
 async function query(request:Request,env:Env){const user=await requireUser(request,env);const body:any=await request.json();const table=String(body.table||'');if(!TABLES[table])return json('不允許的資料表',400);const movementTable=table==='movements'||table==='tool_movements';const {sql:where,args}=filtersSql(table,body.filters);if(body.action==='select'){let sql=`SELECT * FROM ${table}${where}`;if(body.order?.field&&TABLES[table].has(body.order.field))sql+=` ORDER BY ${body.order.field} ${body.order.ascending?'ASC':'DESC'}`;const result=await env.DB.prepare(sql).bind(...args).all();const rows=result.results.map((row:any)=>table==='people'?{...row,active:Boolean(row.active)}:row);if(body.one==='single'&&rows.length!==1)return json(rows.length?'找到多筆資料':'找不到資料',406);return json(body.one?rows[0]||null:rows)}
   if(body.action==='insert'){const list=Array.isArray(body.values)?body.values:[body.values];const created:any[]=[];for(const raw of list){const row=fields(table,{id:raw?.id||uuid(),...raw});const keys=Object.keys(row);await env.DB.prepare(`INSERT INTO ${table} (${keys.join(',')}) VALUES (${keys.map(()=>'?').join(',')})`).bind(...keys.map(k=>row[k])).run();created.push(row)}return json(body.one?created[0]:created)}
-  if(body.action==='update'){const row=fields(table,body.values);if(movementTable&&('note' in row)&&(user.role!=='admin'||String(row.note).startsWith(deletedMovementPrefix)))return json('請透過紀錄查詢申請刪除',403);const keys=Object.keys(row);if(!keys.length)return json('沒有可更新的欄位',400);if(body.columns){const result=await env.DB.prepare(`UPDATE ${table} SET ${keys.map(k=>`${k}=?`).join(',')}${where} RETURNING *`).bind(...keys.map(k=>row[k]),...args).all();const rows=result.results;return json(body.one?(rows[0]||null):rows)}await env.DB.prepare(`UPDATE ${table} SET ${keys.map(k=>`${k}=?`).join(',')}${where}`).bind(...keys.map(k=>row[k]),...args).run();return json(null)}
-  if(body.action==='delete'){if(movementTable)return json('請透過紀錄查詢申請刪除',403);await env.DB.prepare(`DELETE FROM ${table}${where}`).bind(...args).run();return json(null)}
+  if(body.action==='update'){const row=fields(table,body.values);if(table==='tools'&&row.status==='已刪除')return json('請先送出刪除申請',403);if(movementTable&&('note' in row)&&(user.role!=='admin'||String(row.note).startsWith(deletedMovementPrefix)))return json('請透過紀錄查詢申請刪除',403);const keys=Object.keys(row);if(!keys.length)return json('沒有可更新的欄位',400);if(body.columns){const result=await env.DB.prepare(`UPDATE ${table} SET ${keys.map(k=>`${k}=?`).join(',')}${where} RETURNING *`).bind(...keys.map(k=>row[k]),...args).all();const rows=result.results;return json(body.one?(rows[0]||null):rows)}await env.DB.prepare(`UPDATE ${table} SET ${keys.map(k=>`${k}=?`).join(',')}${where}`).bind(...keys.map(k=>row[k]),...args).run();return json(null)}
+  if(body.action==='delete'){
+    if(movementTable||table==='items')return json('請透過紀錄查詢申請刪除',403);
+    if(table==='tools'){
+      const cleanup=body.filters?.length===1&&body.filters[0].field==='id'&&body.filters[0].op==='eq';
+      if(!cleanup)return json('請先送出刪除申請',403);
+      await env.DB.prepare(`DELETE FROM tools WHERE id=? AND owner_id=? AND stock=0
+        AND coalesce(serial,'')<>'' AND datetime(created_at)>=datetime('now','-5 minutes')
+        AND NOT EXISTS (SELECT 1 FROM tool_movements WHERE tool_id=tools.id)`).bind(args[0],user.id).run();
+      return json(null);
+    }
+    await env.DB.prepare(`DELETE FROM ${table}${where}`).bind(...args).run();
+    return json(null);
+  }
   return json('不支援的操作',400)
 }
 async function createSession(env:Env,user:any){const id=uuid();await env.DB.prepare(`INSERT INTO sessions(id,user_id,expires_at) VALUES(?,?,datetime('now','+30 days'))`).bind(id,user.id).run();return {session:{user:{id:user.id,email:user.email,username:user.username,role:user.role}},cookie:`inventory_session=${id}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`}}
@@ -103,6 +122,52 @@ async function movementDeletion(env: Env, user: { id: string; role: string }, ap
   return json(true);
 }
 
+async function dataDeletion(env: Env, user: { id: string; role: string }, action: string, p: any) {
+  if (action !== 'request_data_delete' && user.role !== 'admin') return json('僅限管理員審批',403);
+  if (action === 'list_data_delete_requests') {
+    return json((await env.DB.prepare(
+      'SELECT id,target_table,target_label,requested_at FROM data_delete_requests WHERE approved_at IS NULL ORDER BY requested_at'
+    ).all()).results);
+  }
+  if (action === 'request_data_delete') {
+    const table = p.p_table;
+    if (table !== 'items' && table !== 'tools' && table !== 'users') return json('不支援的刪除類別',400);
+    if (table === 'users' && user.role !== 'admin') return json('僅限管理員提出帳號刪除申請',403);
+    if (!Array.isArray(p.p_ids) || !p.p_ids.length || p.p_ids.some((id: unknown) => typeof id !== 'string' || !id)) {
+      return json('請選擇要申請刪除的資料',400);
+    }
+    const ids = [...new Set<string>(p.p_ids)];
+    if (table === 'users' && ids.includes(user.id)) return json('不可申請刪除自己的帳號',400);
+    const label = table === 'users' ? 'coalesce(username,email)' : table === 'tools'
+      ? "name || CASE WHEN coalesce(serial,'')='' THEN '' ELSE '／'||serial END" : 'name';
+    const guard = table === 'users' ? "AND coalesce(username,'') COLLATE NOCASE <> 'keker' AND email COLLATE NOCASE <> 'htehssssss@gmail.com'"
+      : table === 'tools' ? "AND coalesce(status,'') <> '已刪除'" : '';
+    const result = await env.DB.prepare(`INSERT OR IGNORE INTO data_delete_requests
+      (id,target_table,target_id,target_label,requester_id)
+      SELECT lower(hex(randomblob(16))),?,id,${label},? FROM ${table}
+      WHERE id IN (SELECT value FROM json_each(?)) ${guard}`)
+      .bind(table,user.id,JSON.stringify(ids)).run();
+    return result.meta.changes ? json(result.meta.changes) : json('沒有可申請的資料，或已在待核准清單中',409);
+  }
+  const pending = await env.DB.prepare(
+    'SELECT target_table,target_id FROM data_delete_requests WHERE id=? AND approved_at IS NULL'
+  ).bind(String(p.p_id || '')).first<{ target_table: string; target_id: string }>();
+  if (!pending) return json('找不到待核准申請',409);
+  const {target_table: table,target_id: id} = pending;
+  if (table !== 'items' && table !== 'tools' && table !== 'users') return json('不支援的刪除類別',400);
+  if (table === 'users' && id === user.id) return json('不可核准刪除自己的帳號',403);
+  const statement = table === 'tools'
+    ? "UPDATE tools SET status='已刪除',stock=0,safety_stock=0,holder='',department='',issue_date='' WHERE id=? AND coalesce(status,'')<>'已刪除'"
+    : table === 'users'
+      ? "DELETE FROM users WHERE id=? AND coalesce(username,'') COLLATE NOCASE <> 'keker' AND email COLLATE NOCASE <> 'htehssssss@gmail.com'"
+      : 'DELETE FROM items WHERE id=?';
+  const result = await env.DB.batch([
+    env.DB.prepare(statement + ' AND EXISTS (SELECT 1 FROM data_delete_requests WHERE id=? AND approved_at IS NULL)').bind(id,p.p_id),
+    env.DB.prepare('UPDATE data_delete_requests SET approver_id=?,approved_at=CURRENT_TIMESTAMP WHERE id=? AND approved_at IS NULL AND changes()=1').bind(user.id,p.p_id),
+  ]);
+  return result[1].meta.changes ? json(true) : json('資料已異動或申請已處理，請重新整理',409);
+}
+
 async function rpc(request:Request,env:Env,name:string){const p:any=await request.json();
   if(name==='resolve_login'){const login=String(p.p_login||'').trim();const row=await env.DB.prepare('SELECT email FROM users WHERE username=? COLLATE NOCASE OR email=? COLLATE NOCASE').bind(login,login).first<any>();return json(row?.email||null)} const user=await requireUser(request,env);
   if(name==='register_username'){await env.DB.prepare('UPDATE users SET username=? WHERE id=?').bind(String(p.p_username).toLowerCase(),p.p_user_id).run();return json(true)}
@@ -114,9 +179,12 @@ async function rpc(request:Request,env:Env,name:string){const p:any=await reques
   if (name === 'request_movement_delete' || name === 'approve_movement_delete') {
     return movementDeletion(env, user, name === 'approve_movement_delete', p);
   }
+  if (['request_data_delete','list_data_delete_requests','approve_data_delete'].includes(name)) {
+    return dataDeletion(env,user,name,p);
+  }
   if(name==='admin_list_accounts'){if(user.role!=='admin')return json('僅限管理主帳號',403);return json((await env.DB.prepare('SELECT id user_id,username,role,created_at FROM users ORDER BY created_at').all()).results)}
 
-if(name==='admin_set_role'){if(user.role!=='admin')return json('僅限系統管理員',403);if(p.p_user_id===user.id)return json('不可修改自己的權限',400);const role=p.p_role==='admin'?'admin':'user';await env.DB.prepare('UPDATE users SET role=? WHERE id=?').bind(role,p.p_user_id).run();return json(true)} if(name==='admin_delete_account'){if(user.role!=='admin')return json('僅限系統管理員',403);if(p.p_user_id===user.id)return json('主帳號不可刪除',400);await env.DB.prepare('DELETE FROM users WHERE id=?').bind(p.p_user_id).run();return json(true)}
+if(name==='admin_set_role'){if(user.role!=='admin')return json('僅限系統管理員',403);if(p.p_user_id===user.id)return json('不可修改自己的權限',400);const role=p.p_role==='admin'?'admin':'user';await env.DB.prepare('UPDATE users SET role=? WHERE id=?').bind(role,p.p_user_id).run();return json(true)}
   const now = new Date();
   let issueTimestamp = now.toISOString();
   if (p.p_date !== undefined && (name === 'issue_stationery' || name === 'issue_tool_inventory')) {
